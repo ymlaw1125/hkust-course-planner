@@ -38,14 +38,28 @@ and the checkbox turns it off entirely.
 
 ### Constraints
 
-Earliest start · latest finish · free days · protected lunch window · max gap
-between classes · max classes per day · skip full sections. Results sort by
-fewest days on campus, least idle time, latest start, earliest finish, or most
-compact.
+Earliest start · latest finish · **days off per week** · specific free days ·
+protected lunch window · max gap between classes · max classes per day · skip
+full sections. Results sort by fewest days on campus, least idle time, latest
+start, earliest finish, or most compact.
 
-If a combination is impossible the planner says *why* — e.g. *"for COMP 2011,
-every LAB option is ruled out by your constraints"* — rather than just
-returning nothing.
+**Days off per week** asks for *any* N free weekdays rather than naming them —
+"give me a 3-day week, I don't care which days". It combines with the specific
+free-day chips if you want both.
+
+This one is enforced *during* the search, not by filtering afterwards. Adding a
+course can only ever occupy more days, so a partial timetable that already uses
+too many is dead and its whole branch is skipped. That matters because the
+search stops at 2,000 results: for `PHYS 1112 + MATH 1014 + COMP 2711`, asking
+for 2 days off returns the complete set of **416** timetables, where filtering a
+truncated search would have shown only **271** and silently hidden 145 valid
+options. Max-classes-per-day is pruned the same way. Max gap can't be — a later
+class can fill an earlier gap — so it's judged on the finished timetable.
+
+If a combination is impossible the planner says *why*, naming the constraints
+actually in play — *"for COMP 2011, every LAB option is ruled out by your
+constraints"*, or *"Clash-free timetables exist, but none satisfies 2 days off
+per week and the max-gap limit."*
 
 ## Notes on the real data
 
@@ -95,3 +109,6 @@ data/                 generated catalog
 
 Your selection, unticked sections, constraints and theme are saved to
 `localStorage`. Nothing is uploaded anywhere.
+
+The `?v=N` on the script tags in `index.html` is a cache-buster — bump it after
+editing a `js/` file, or the browser may keep serving the old one.

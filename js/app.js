@@ -199,6 +199,7 @@
       earliest: num('#c-earliest'),
       latest: num('#c-latest'),
       freeDays: [...document.querySelectorAll('#c-freedays .chip.on')].map((b) => +b.dataset.day),
+      minFreeDays: num('#c-minfree'),
       lunch,
       maxGap: num('#c-maxgap'),
       maxPerDay: num('#c-maxperday'),
@@ -211,6 +212,7 @@
   function resetConstraints() {
     $('#c-earliest').value = '';
     $('#c-latest').value = '';
+    $('#c-minfree').value = '';
     $('#c-lunch').value = '';
     $('#c-maxgap').value = '';
     $('#c-maxperday').value = '';
@@ -287,8 +289,11 @@
     if (tt) {
       const s = tt.stats;
       const dayNames = s.perDay.map((d) => DAYS[d.day]).join(', ');
+      const used = new Set(s.perDay.map((d) => d.day));
+      const offNames = [0, 1, 2, 3, 4].filter((d) => !used.has(d)).map((d) => DAYS[d]);
       meta.innerHTML =
         `<span class="stat"><b>${s.days}</b> day${s.days === 1 ? '' : 's'} <small>${esc(dayNames)}</small></span>` +
+        `<span class="stat"><b>${s.freeWeekdays}</b> day${s.freeWeekdays === 1 ? '' : 's'} off <small>${esc(offNames.join(', ') || '—')}</small></span>` +
         `<span class="stat"><b>${(s.totalGap / 60).toFixed(1)}h</b> idle between classes</span>` +
         `<span class="stat"><b>${s.earliestStart == null ? '–' : hhmm(s.earliestStart)}</b> earliest start</span>` +
         `<span class="stat"><b>${s.latestEnd == null ? '–' : hhmm(s.latestEnd)}</b> latest finish</span>`;
@@ -373,6 +378,7 @@
         disabled: state.disabled,
         constraints: {
           earliest: $('#c-earliest').value, latest: $('#c-latest').value,
+          minfree: $('#c-minfree').value,
           lunch: $('#c-lunch').value, maxgap: $('#c-maxgap').value,
           maxperday: $('#c-maxperday').value, linked: $('#c-linked').checked,
           skipfull: $('#c-skipfull').checked, sort: $('#c-sort').value,
@@ -393,6 +399,7 @@
     const c = saved.constraints || {};
     if (c.earliest) $('#c-earliest').value = c.earliest;
     if (c.latest) $('#c-latest').value = c.latest;
+    if (c.minfree) $('#c-minfree').value = c.minfree;
     if (c.lunch) $('#c-lunch').value = c.lunch;
     if (c.maxgap) $('#c-maxgap').value = c.maxgap;
     if (c.maxperday) $('#c-maxperday').value = c.maxperday;
@@ -452,7 +459,7 @@
     $('#btn-generate').addEventListener('click', generate);
     $('#btn-reset-constraints').addEventListener('click', resetConstraints);
 
-    for (const sel of ['#c-earliest', '#c-latest', '#c-lunch', '#c-maxgap', '#c-maxperday', '#c-linked', '#c-skipfull', '#c-sort']) {
+    for (const sel of ['#c-earliest', '#c-latest', '#c-minfree', '#c-lunch', '#c-maxgap', '#c-maxperday', '#c-linked', '#c-skipfull', '#c-sort']) {
       $(sel).addEventListener('change', persist);
     }
 

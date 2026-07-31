@@ -19,6 +19,9 @@
       if (opts.freeDays && opts.freeDays.includes(m.day)) return false;
       if (opts.earliest != null && m.start < opts.earliest) return false;
       if (opts.latest != null && m.end > opts.latest) return false;
+      // A section overlapping the lunch band can never be in a valid timetable,
+      // so rule it out here rather than after the search.
+      if (opts.lunch && m.start < opts.lunch[1] && opts.lunch[0] < m.end) return false;
     }
     return true;
   }
@@ -182,8 +185,12 @@
       perDay.push({ day, count: list.length, first, last, gap: dayGap });
     }
 
+    let usedWeekdays = 0;
+    for (let d = 0; d < 5; d++) if (byDay.has(d)) usedWeekdays++;
+
     return {
       days: byDay.size,
+      freeWeekdays: 5 - usedWeekdays,
       perDay: perDay.sort((a, b) => a.day - b.day),
       totalGap, maxGap, span, teaching,
       earliestStart: earliestStart === Infinity ? null : earliestStart,
@@ -191,19 +198,14 @@
     };
   }
 
-  /** Whole-timetable constraints that can't be checked per section. */
+  /* Whole-timetable constraints. Free-day count and max-per-day are enforced
+     during the search instead (see prune below) — they only ever get worse as
+     courses are added, so pruning there keeps them correct even when the
+     result cap cuts the search short. Max gap is not monotonic (a later class
+     can fill an earlier gap), so it has to be judged on the finished timetable. */
   function passesGlobal(stats, opts) {
     if (opts.maxGap != null && stats.maxGap > opts.maxGap) return false;
-    if (opts.maxPerDay != null && stats.perDay.some((d) => d.count > opts.maxPerDay)) return false;
-    if (opts.lunch) {
-      const [ls, le] = opts.lunch;
-      for (const d of stats.perDay) {
-        // Needs a free window inside the lunch band on every day with class.
-        const dayMeets = opts._meetIndex.get(d.day) || [];
-        const blocked = dayMeets.some((m) => m.start < le && ls < m.end);
-        if (blocked) return false;
-      }
-    }
+    if (opts.minFreeDays && stats.freeWeekdays < opts.minFreeDays) return false;
     return true;
   }
 
@@ -259,6 +261,25 @@
     let truncated = false;
     const chosen = new Array(prepared.length);
 
+    // Adding a course can only occupy more days and pile more classes onto a
+    // day, never fewer — so a partial timetable that already breaks these is
+    // dead, and every branch below it can be skipped.
+    const minFree = opts.minFreeDays || 0;
+    const maxWeekdays = 5 - minFree;
+    const dayCount = new Array(7).fill(0);
+
+    const violatesPrune = () => {
+      if (minFree > 0) {
+        let used = 0;
+        for (let d = 0; d < 5; d++) if (dayCount[d] > 0) used++;
+        if (used > maxWeekdays) return true;
+      }
+      if (opts.maxPerDay != null) {
+        for (let d = 0; d < 7; d++) if (dayCount[d] > opts.maxPerDay) return true;
+      }
+      return false;
+    };
+
     const rec = (i, meetsSoFar) => {
       if (truncated) return;
       if (i === prepared.length) {
@@ -269,8 +290,14 @@
       for (const bundle of prepared[i].bundles) {
         if (++nodes > MAX_NODES) { truncated = true; return; }
         if (clashes(meetsSoFar, bundle.meetings)) continue;
-        chosen[i] = bundle;
-        rec(i + 1, meetsSoFar.concat(bundle.meetings));
+
+        for (const m of bundle.meetings) dayCount[m.day]++;
+        if (!violatesPrune()) {
+          chosen[i] = bundle;
+          rec(i + 1, meetsSoFar.concat(bundle.meetings));
+        }
+        for (const m of bundle.meetings) dayCount[m.day]--;
+
         if (truncated) return;
       }
     };
@@ -290,12 +317,7 @@
       }
       const stats = analyse(meetings);
 
-      const meetIndex = new Map();
-      for (const m of meetings) {
-        if (!meetIndex.has(m.day)) meetIndex.set(m.day, []);
-        meetIndex.get(m.day).push(m);
-      }
-      if (!passesGlobal(stats, { ...opts, _meetIndex: meetIndex })) continue;
+      if (!passesGlobal(stats, opts)) continue;
 
       timetables.push({ entries, meetings, stats });
     }
@@ -314,8 +336,29 @@
       warnings,
       truncated,
       rawCount: results.length,
-      error: timetables.length ? null : 'Every clash-free combination was filtered out by your constraints. Try loosening the gap, lunch or per-day limits.',
+      error: timetables.length ? null : noResultReason(results.length, opts),
     };
+  }
+
+  /** Name the constraints actually in play, so "0 results" is actionable. */
+  function noResultReason(rawCount, opts) {
+    const active = [];
+    if (opts.minFreeDays) active.push(`${opts.minFreeDays} day${opts.minFreeDays === 1 ? '' : 's'} off per week`);
+    if (opts.maxGap != null) active.push('the max-gap limit');
+    if (opts.maxPerDay != null) active.push('the classes-per-day limit');
+    if (opts.lunch) active.push('the protected lunch window');
+    if (opts.freeDays && opts.freeDays.length) active.push('your chosen free days');
+    if (opts.earliest != null || opts.latest != null) active.push('your start/finish times');
+
+    if (!active.length) {
+      return 'These courses have no clash-free combination — their sections overlap no matter which you pick.';
+    }
+    const one = active.length === 1;
+    const list = one ? active[0] : `${active.slice(0, -1).join(', ')} and ${active[active.length - 1]}`;
+    const advice = one ? 'Try relaxing it.' : 'Try relaxing one of them.';
+    return rawCount === 0
+      ? `No clash-free combination survives ${list}. ${advice}`
+      : `Clash-free timetables exist, but none satisfies ${list}. ${advice}`;
   }
 
   global.HK.Generator = { generate, buildBundles, analyse, MAX_RESULTS };

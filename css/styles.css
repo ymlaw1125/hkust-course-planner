@@ -200,6 +200,7 @@ code, kbd {
 .ctl.check { flex-direction: row; align-items: flex-start; gap: 7px; cursor: pointer; line-height: 1.35; }
 .ctl.check input { margin-top: 2px; accent-color: var(--accent); flex: none; }
 .ctl.check small { color: var(--fg-3); display: block; font-size: 11px; }
+.ctl > span > small { color: var(--fg-3); font-size: 11px; }
 .ctl.inline { flex-direction: row; align-items: center; }
 
 .chips { display: flex; gap: 4px; flex-wrap: wrap; }

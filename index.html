@@ -66,8 +66,19 @@
         <select id="c-latest"></select>
       </label>
 
+      <label class="ctl">
+        <span>Days off per week <small>any day counts</small></span>
+        <select id="c-minfree">
+          <option value="">Don't care</option>
+          <option value="1">At least 1 day off</option>
+          <option value="2">At least 2 days off</option>
+          <option value="3">At least 3 days off</option>
+          <option value="4">At least 4 days off</option>
+        </select>
+      </label>
+
       <div class="ctl block">
-        <span>Days you want free</span>
+        <span>Specific days you want free</span>
         <div id="c-freedays" class="chips"></div>
       </div>
 
@@ -219,10 +230,10 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
 </div>
 
 <script src="data/index.js"></script>
-<script src="js/model.js"></script>
-<script src="js/parser.js"></script>
-<script src="js/generator.js"></script>
-<script src="js/render.js"></script>
-<script src="js/app.js"></script>
+<script src="js/model.js?v=4"></script>
+<script src="js/parser.js?v=4"></script>
+<script src="js/generator.js?v=4"></script>
+<script src="js/render.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
 </body>
 </html>
