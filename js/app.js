@@ -7,6 +7,7 @@
   const esc = Render.escapeHtml;
 
   const STORE_KEY = 'hkust-planner-v1';
+  const GROUPS_KEY = 'hkust-planner-groups-v1';
 
   const state = {
     selected: [],         // course codes, in the order added
@@ -14,6 +15,7 @@
     results: [],
     cursor: 0,
     courseOrder: new Map(),
+    activeGroup: null,    // id of the group currently loaded, for highlighting
   };
 
   /* --------------------------------------------------------- boot */
@@ -34,6 +36,7 @@
     buildTimeSelects();
     buildDayChips();
     wireEvents();
+    renderGroups();
     restore();
   }
 
@@ -98,6 +101,7 @@
     const course = await Catalog.getCourse(code);
     if (!course) { flash(`Couldn't load ${code}`); return; }
     state.selected.push(code);
+    unlinkGroup();
     reorderColors();
     renderSelected();
     runSearch();
@@ -107,10 +111,20 @@
   function removeCourse(code) {
     state.selected = state.selected.filter((c) => c !== code);
     delete state.disabled[code];
+    unlinkGroup();
     reorderColors();
     renderSelected();
     runSearch();
     persist();
+  }
+
+  /* The selection no longer matches the loaded group, so drop the highlight
+     rather than letting it claim otherwise. Section un-ticks don't count —
+     they don't change which courses are selected. */
+  function unlinkGroup() {
+    if (state.activeGroup === null) return;
+    state.activeGroup = null;
+    renderGroups();
   }
 
   function reorderColors() {
@@ -178,6 +192,145 @@
           </details>`;
       })
       .join('');
+  }
+
+  /* --------------------------------------------------------- saved groups */
+
+  function loadGroups() {
+    try { return JSON.parse(localStorage.getItem(GROUPS_KEY) || '[]'); } catch (_) { return []; }
+  }
+
+  function storeGroups(groups) {
+    try { localStorage.setItem(GROUPS_KEY, JSON.stringify(groups)); } catch (_) { /* storage disabled */ }
+  }
+
+  function groupMsg(html, cls = 'muted') {
+    $('#group-msg').innerHTML = html ? `<span class="${cls}">${html}</span>` : '';
+  }
+
+  function renderGroups() {
+    const groups = loadGroups();
+    const box = $('#group-list');
+
+    if (!groups.length) {
+      box.innerHTML = '<p class="empty">Nothing saved yet. Pick your courses, type a name above and hit Save.</p>';
+      return;
+    }
+
+    box.innerHTML = groups
+      .map((g) => {
+        const preview = g.codes.slice(0, 3).join(', ') + (g.codes.length > 3 ? ` +${g.codes.length - 3}` : '');
+        const tweaked = Object.values(g.disabled || {}).reduce((n, l) => n + l.length, 0);
+        return `<div class="grp${g.id === state.activeGroup ? ' active' : ''}">
+            <button class="grp-load" data-load="${esc(g.id)}" title="Load these ${g.codes.length} courses">
+              <span class="grp-name">${esc(g.name)}</span>
+              <span class="grp-meta">${g.codes.length} course${g.codes.length === 1 ? '' : 's'} · ${esc(preview)}${tweaked ? ` · ${tweaked} section${tweaked === 1 ? '' : 's'} off` : ''}</span>
+            </button>
+            <button class="btn tiny ghost grp-del" data-del="${esc(g.id)}" title="Delete">✕</button>
+          </div>`;
+      })
+      .join('');
+  }
+
+  function saveCurrentAsGroup() {
+    const input = $('#group-name');
+    const name = input.value.trim();
+
+    if (!state.selected.length) {
+      groupMsg('Select some courses first — there is nothing to save.', 'warn');
+      return;
+    }
+    if (!name) {
+      groupMsg('Give the group a name.', 'warn');
+      input.focus();
+      return;
+    }
+
+    const groups = loadGroups();
+    const existing = groups.find((g) => g.name.toLowerCase() === name.toLowerCase());
+    if (existing && !confirm(`"${existing.name}" already exists. Overwrite it?`)) return;
+
+    // Keep only the un-ticks that belong to the courses being saved.
+    const disabled = {};
+    for (const code of state.selected) {
+      if (state.disabled[code] && state.disabled[code].length) {
+        disabled[code] = state.disabled[code].slice();
+      }
+    }
+
+    const group = {
+      id: existing ? existing.id : `g${Date.now().toString(36)}`,
+      name,
+      codes: state.selected.slice(),
+      disabled,
+      saved: new Date().toISOString(),
+    };
+
+    if (existing) groups[groups.indexOf(existing)] = group;
+    else groups.unshift(group);
+
+    storeGroups(groups);
+    state.activeGroup = group.id;
+    input.value = '';
+    renderGroups();
+    groupMsg(`Saved "${esc(group.name)}" — ${group.codes.length} course${group.codes.length === 1 ? '' : 's'}.`, 'ok');
+  }
+
+  async function applyGroup(id) {
+    const group = loadGroups().find((g) => g.id === id);
+    if (!group) return;
+
+    if (state.selected.length && !confirm(`Replace your current ${state.selected.length} selected course(s) with "${group.name}"?`)) {
+      return;
+    }
+
+    groupMsg(`Loading "${esc(group.name)}"…`);
+
+    // A saved group can outlive a catalog refresh, so tolerate missing courses.
+    const found = [];
+    const missing = [];
+    for (const code of group.codes) {
+      let course = null;
+      try { course = await Catalog.getCourse(code); } catch (_) { course = null; }
+      if (course) found.push(code);
+      else missing.push(code);
+    }
+
+    state.selected = found;
+    state.disabled = {};
+    for (const code of found) {
+      if (group.disabled && group.disabled[code]) state.disabled[code] = group.disabled[code].slice();
+    }
+    state.activeGroup = group.id;
+    state.results = [];
+    state.cursor = 0;
+
+    reorderColors();
+    renderSelected();
+    renderGroups();
+    runSearch();
+    showResult();
+    $('#gen-status').innerHTML = '';
+    persist();
+
+    if (missing.length) {
+      groupMsg(
+        `Loaded ${found.length} of ${group.codes.length}. Not offered this term: ${esc(missing.join(', '))}.`,
+        'warn'
+      );
+    } else {
+      groupMsg(`Loaded "${esc(group.name)}". Hit Generate.`, 'ok');
+    }
+  }
+
+  function deleteGroup(id) {
+    const groups = loadGroups();
+    const g = groups.find((x) => x.id === id);
+    if (!g || !confirm(`Delete the group "${g.name}"?`)) return;
+    storeGroups(groups.filter((x) => x.id !== id));
+    if (state.activeGroup === id) state.activeGroup = null;
+    renderGroups();
+    groupMsg(`Deleted "${esc(g.name)}".`);
   }
 
   /* --------------------------------------------------------- constraints */
@@ -448,12 +601,25 @@
       state.selected = [];
       state.disabled = {};
       state.results = [];
+      unlinkGroup();
+      groupMsg('');
       reorderColors();
       renderSelected();
       runSearch();
       showResult();
       $('#gen-status').innerHTML = '';
       persist();
+    });
+
+    $('#btn-save-group').addEventListener('click', saveCurrentAsGroup);
+    $('#group-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveCurrentAsGroup(); }
+    });
+    $('#group-list').addEventListener('click', (e) => {
+      const del = e.target.closest('[data-del]');
+      if (del) { deleteGroup(del.dataset.del); return; }
+      const load = e.target.closest('[data-load]');
+      if (load) applyGroup(load.dataset.load);
     });
 
     $('#btn-generate').addEventListener('click', generate);

@@ -47,6 +47,17 @@
     <div id="selected-list" class="selected-list">
       <p class="empty">No courses selected yet. Search above and click a course to add it.</p>
     </div>
+
+    <div class="panel-head sticky-sub">
+      <h2>Saved groups</h2>
+      <span class="hint-inline">reuse a set of courses</span>
+    </div>
+    <div class="group-save">
+      <input id="group-name" type="text" maxlength="40" placeholder="Name this set… e.g. Year 2 Fall">
+      <button id="btn-save-group" class="btn small primary">Save</button>
+    </div>
+    <div id="group-msg" class="group-msg"></div>
+    <div id="group-list" class="group-list"></div>
   </aside>
 
   <!-- ================= MIDDLE: constraints ================= -->
@@ -220,6 +231,7 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
       <ol>
         <li><strong>The catalog is already loaded.</strong> Every course in the term was scraped from <code>w5.ab.ust.hk/wcq</code>. To refresh it later, run <code>node scripts/scrape.mjs</code>. <em>Import / Paste</em> is there for anything the scrape missed.</li>
         <li><strong>Pick your courses.</strong> Search, click to add. Expand a course to un-tick any section you can't or won't take (e.g. a lecture at 9am).</li>
+        <li><strong>Save the set.</strong> Once your courses are picked, name them under <em>Saved groups</em> and hit Save. Next time, one click restores the whole set — including any sections you un-ticked — so you never retype it.</li>
         <li><strong>Set constraints</strong>, then hit <em>Generate</em>.</li>
         <li><strong>Browse every variant.</strong> The planner tries one section of each type (lecture + tutorial + lab) per course and keeps only combinations with zero clashes.</li>
       </ol>
@@ -230,10 +242,10 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
 </div>
 
 <script src="data/index.js"></script>
-<script src="js/model.js?v=4"></script>
-<script src="js/parser.js?v=4"></script>
-<script src="js/generator.js?v=4"></script>
-<script src="js/render.js?v=4"></script>
-<script src="js/app.js?v=4"></script>
+<script src="js/model.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/generator.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

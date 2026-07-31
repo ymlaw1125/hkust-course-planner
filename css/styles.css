@@ -189,6 +189,39 @@ code, kbd {
 .sc-name { font-weight: 600; }
 .sc-time { color: var(--fg-2); font-size: 11px; }
 
+/* ---------------------------------------------------------------- saved groups */
+.hint-inline { font-size: 11px; color: var(--fg-3); }
+
+.group-save { display: flex; gap: 6px; margin-bottom: 7px; }
+.group-save input {
+  flex: 1; min-width: 0; padding: 6px 9px;
+  background: var(--bg-3); color: var(--fg);
+  border: 1px solid var(--line-2); border-radius: 7px;
+  font-family: inherit; font-size: 12.5px;
+}
+.group-save input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.group-msg { font-size: 11.5px; margin-bottom: 6px; }
+.group-msg:empty { display: none; }
+
+.group-list { display: flex; flex-direction: column; gap: 5px; }
+.grp { display: flex; align-items: stretch; gap: 4px; }
+.grp-load {
+  flex: 1; min-width: 0; text-align: left; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line-2);
+  border-radius: 7px; padding: 6px 9px; color: var(--fg);
+  font-family: inherit; display: flex; flex-direction: column; gap: 1px;
+}
+.grp-load:hover { border-color: var(--accent); background: var(--line); }
+.grp.active .grp-load { border-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+.grp-name { font-size: 12.5px; font-weight: 600; }
+.grp-meta {
+  font-size: 10.5px; color: var(--fg-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.grp-del { align-self: center; color: var(--fg-3); }
+.grp-del:hover { color: var(--warn); }
+
 /* ---------------------------------------------------------------- constraints */
 .constraints { display: flex; flex-direction: column; gap: 9px; }
 .ctl { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--fg-2); }

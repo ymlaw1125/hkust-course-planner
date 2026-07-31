@@ -13,6 +13,25 @@ Open `index.html` in a browser. That's it — no server, no install, no build.
 The catalog is bundled as plain `.js` files so it works straight off the
 filesystem.
 
+If you're **editing** the source, run it over HTTP instead — browsers cache
+`file://` scripts aggressively and ignore `?v=` cache-busting on them, so edits
+can silently fail to load:
+
+```bash
+node scripts/serve.mjs
+```
+
+## Saved groups
+
+Pick your courses, type a name under **Saved groups**, hit Save. One click
+restores the whole set later, so you never retype it. Groups also remember the
+individual sections you un-ticked.
+
+Saving under an existing name overwrites it (case-insensitive, with a confirm).
+Loading a group asks before replacing a non-empty selection. A group made
+against an older catalog still loads what it can — *"Loaded 1 of 2. Not offered
+this term: ZZZZ 9999."* — rather than failing outright.
+
 ## How it works
 
 For each course the planner enumerates every legal *bundle* — one lecture, one
@@ -102,13 +121,13 @@ js/model.js           catalog + lazy subject loading
 js/generator.js       bundle building, conflict search, scoring
 js/render.js          weekly grid, section cards, .ics export
 js/parser.js          paste / manual import
-js/app.js             UI wiring, constraints, localStorage
+js/app.js             UI wiring, constraints, saved groups, localStorage
 scripts/scrape.mjs    catalog scraper
+scripts/serve.mjs     no-cache static server for development
 data/                 generated catalog
 ```
 
 Your selection, unticked sections, constraints and theme are saved to
-`localStorage`. Nothing is uploaded anywhere.
-
-The `?v=N` on the script tags in `index.html` is a cache-buster — bump it after
-editing a `js/` file, or the browser may keep serving the old one.
+`localStorage` under `hkust-planner-v1`; saved groups live separately under
+`hkust-planner-groups-v1`, so clearing one doesn't take the other with it.
+Nothing is uploaded anywhere.
