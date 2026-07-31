@@ -1,0 +1,1 @@
+window.CATALOG_SUBJECT_CMAA=[{"subject":"CMAA","code":"CMAA 7990","title":"Doctoral Thesis Research","credits":null,"sections":[{"section":"R1","crn":"4506","kind":"REC","group":"1","meetings":[],"rooms":[],"instructors":"TBA","ta":"","quota":5,"enrol":4,"avail":1,"wait":0,"remarks":"","tba":true}]}];

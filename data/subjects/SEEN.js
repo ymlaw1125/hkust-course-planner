@@ -1,0 +1,1 @@
+window.CATALOG_SUBJECT_SEEN=[{"subject":"SEEN","code":"SEEN 7990","title":"Doctoral Thesis Research","credits":null,"sections":[{"section":"R1","crn":"4512","kind":"REC","group":"1","meetings":[],"rooms":[],"instructors":"TBA","ta":"","quota":5,"enrol":2,"avail":3,"wait":0,"remarks":"","tba":true}]}];

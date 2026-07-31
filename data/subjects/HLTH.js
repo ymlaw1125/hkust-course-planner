@@ -1,0 +1,1 @@
+window.CATALOG_SUBJECT_HLTH=[{"subject":"HLTH","code":"HLTH 1010","title":"Healthy Lifestyle","credits":null,"sections":[{"section":"R1","crn":"4465","kind":"REC","group":"1","meetings":[],"rooms":[],"instructors":"TBA","ta":"","quota":10,"enrol":0,"avail":10,"wait":0,"remarks":"","tba":true}]}];

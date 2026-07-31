@@ -1,0 +1,1 @@
+window.CATALOG_SUBJECT_AMAT=[{"subject":"AMAT","code":"AMAT 7990","title":"Doctoral Thesis Research","credits":null,"sections":[{"section":"R1","crn":"4504","kind":"REC","group":"1","meetings":[],"rooms":[],"instructors":"TBA","ta":"","quota":5,"enrol":3,"avail":2,"wait":0,"remarks":"","tba":true}]}];

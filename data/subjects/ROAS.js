@@ -1,0 +1,1 @@
+window.CATALOG_SUBJECT_ROAS=[{"subject":"ROAS","code":"ROAS 7990","title":"Doctoral Thesis Research","credits":null,"sections":[{"section":"R1","crn":"4511","kind":"REC","group":"1","meetings":[],"rooms":[],"instructors":"TBA","ta":"","quota":5,"enrol":5,"avail":0,"wait":0,"remarks":"","tba":true}]}];
