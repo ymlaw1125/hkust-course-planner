@@ -248,6 +248,35 @@ body.resizing.y, body.resizing.y * { cursor: row-resize; }
 
 .sec-kind { margin-top: 7px; }
 .sk-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--fg-3); }
+
+.sk-head { display: flex; align-items: center; gap: 7px; }
+.sk-label { flex: none; }
+.sk-pick {
+  flex: 1; min-width: 0;
+  background: var(--bg-3); color: var(--fg);
+  border: 1px solid var(--line-2); border-radius: 6px;
+  padding: 2px 5px; font-family: inherit; font-size: 11px;
+}
+.sk-pick:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.sk-pinned {
+  margin-top: 4px; font-size: 11.5px; color: var(--fg-2);
+  background: var(--bg-2); border: 1px dashed var(--accent);
+  border-radius: 6px; padding: 4px 8px;
+  display: flex; gap: 7px; align-items: baseline; flex-wrap: wrap;
+}
+.sk-pinned strong { color: var(--fg); }
+.sk-when { color: var(--fg-3); font-size: 11px; }
+
+.head-actions { display: flex; gap: 5px; align-items: center; }
+.sel-card .rst { flex: none; color: var(--fg-3); font-size: 13px; line-height: 1; }
+.sel-card .rst:hover { color: var(--accent); }
+
+.pin-badge {
+  flex: none; font-size: 10px; font-weight: 600;
+  color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 0 6px; white-space: nowrap;
+}
 .sec-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .sec-chip {
   display: inline-flex; align-items: center; gap: 5px;

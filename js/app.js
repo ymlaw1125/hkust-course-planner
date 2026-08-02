@@ -3,7 +3,8 @@
   'use strict';
 
   const {
-    DAYS, KIND_LABEL, hhmm, Catalog, CommonCore, sectionsByKind, Generator, Render, Parser,
+    DAYS, KIND_LABEL, KIND_ORDER, hhmm, Catalog, CommonCore, sectionsByKind,
+    Generator, Render, Parser,
   } = global.HK;
   const $ = (sel) => document.querySelector(sel);
   const esc = Render.escapeHtml;
@@ -14,6 +15,7 @@
   const state = {
     selected: [],         // course codes, in the order added
     disabled: {},         // code -> Set of section codes the user unticked
+    pinned: {},           // code -> { KIND: section } forced choices, e.g. pre-enrolled
     results: [],
     cursor: 0,
     courseOrder: new Map(),
@@ -116,6 +118,7 @@
   function removeCourse(code) {
     state.selected = state.selected.filter((c) => c !== code);
     delete state.disabled[code];
+    delete state.pinned[code];
     unlinkGroup();
     reorderColors();
     renderSelected();
@@ -149,12 +152,82 @@
     persist();
   }
 
+  function pinnedOf(code, kind) {
+    return (state.pinned[code] && state.pinned[code][kind]) || '';
+  }
+
+  /** Is this section usable, given a pin on its kind? */
+  function allowedByPin(code, sec) {
+    const pin = pinnedOf(code, sec.kind);
+    return !pin || pin === sec.section;
+  }
+
+  function setPin(code, kind, section) {
+    if (!state.pinned[code]) state.pinned[code] = {};
+    if (section) {
+      state.pinned[code][kind] = section;
+      // A pinned section must not also be sitting in the unticked list.
+      if (state.disabled[code]) {
+        state.disabled[code] = state.disabled[code].filter((s) => s !== section);
+      }
+    } else {
+      delete state.pinned[code][kind];
+      if (!Object.keys(state.pinned[code]).length) delete state.pinned[code];
+    }
+    renderSelected();
+    persist();
+  }
+
+  /** Has this course been customised away from its defaults? */
+  function isCustomised(code) {
+    return pinsFor(code).length > 0 || !!(state.disabled[code] && state.disabled[code].length);
+  }
+
+  /** Back to defaults: every section on, every kind set to "Any". */
+  function resetCourse(code) {
+    delete state.pinned[code];
+    delete state.disabled[code];
+    renderSelected();
+    persist();
+  }
+
+  function resetAllCourses() {
+    const n = state.selected.filter(isCustomised).length;
+    if (!n) return;
+    if (n > 1 && !confirm(`Reset ${n} courses back to Any, unlocking sections and re-ticking everything?`)) return;
+    for (const code of state.selected) {
+      delete state.pinned[code];
+      delete state.disabled[code];
+    }
+    renderSelected();
+    persist();
+  }
+
+  /** Pinned sections for a course, in the usual lecture-then-tutorial order. */
+  function pinsFor(code) {
+    const rank = (k) => {
+      const i = KIND_ORDER.indexOf(k);
+      return i < 0 ? KIND_ORDER.length : i;
+    };
+    return Object.entries(state.pinned[code] || {})
+      .filter(([, v]) => v)
+      .sort((a, b) => rank(a[0]) - rank(b[0]))
+      .map(([, v]) => v);
+  }
+
   function renderSelected() {
     const box = $('#selected-list');
     $('#sel-count').textContent = state.selected.length;
 
+    // Pinning re-renders this list; don't collapse the card being edited.
+    const wasOpen = new Set(
+      [...box.querySelectorAll('.sel-card[open] .sel-code')].map((e) => e.textContent)
+    );
+    const scrollTop = box.closest('.vpane') ? box.closest('.vpane').scrollTop : 0;
+
     if (!state.selected.length) {
       box.innerHTML = '<p class="empty">No courses selected yet. Search above and click a course to add it.</p>';
+      $('#btn-reset-sel').hidden = true;
       return;
     }
 
@@ -166,37 +239,79 @@
 
         const kinds = sectionsByKind(course)
           .map(([kind, secs]) => {
-            const chips = secs
-              .map((s) => {
+            const label = KIND_LABEL[kind] || kind;
+            const pin = pinnedOf(code, kind);
+            const timesOf = (s) => (s.meetings.length
+              ? s.meetings.map((m) => `${DAYS[m.day]} ${hhmm(m.start)}`).join(' · ')
+              : 'TBA');
+
+            const picker = `<select class="sk-pick" data-code="${esc(code)}" data-kind="${esc(kind)}"
+                              title="Pin a specific ${esc(label.toLowerCase())}, e.g. one you're already enrolled in">
+                <option value="">Any (${secs.length})</option>
+                ${secs.map((s) => {
+                  const who = s.instructors ? ` — ${s.instructors.split(/\s*[;,]\s*/)[0]}` : '';
+                  return `<option value="${esc(s.section)}"${pin === s.section ? ' selected' : ''}>${esc(s.section)} · ${esc(timesOf(s))}${esc(who)}</option>`;
+                }).join('')}
+              </select>`;
+
+            // With a kind pinned, its exclusion chips would be redundant, so
+            // show what was pinned instead of a row of dead checkboxes.
+            let body;
+            if (pin) {
+              const s = secs.find((x) => x.section === pin);
+              body = `<div class="sk-pinned">
+                  Locked to <strong>${esc(pin)}</strong>
+                  ${s ? `<span class="sk-when">${esc(timesOf(s))}${s.rooms && s.rooms[0] ? ` · ${esc(s.rooms[0])}` : ''}</span>` : `<span class="warn">— not offered this term</span>`}
+                </div>`;
+            } else {
+              body = `<div class="sec-chips">${secs.map((s) => {
                 const off = isDisabled(code, s.section);
-                const times = s.meetings.length
-                  ? s.meetings.map((m) => `${DAYS[m.day]} ${hhmm(m.start)}`).join(' · ')
-                  : 'TBA';
                 const full = s.avail != null && s.avail <= 0;
                 return `<label class="sec-chip${off ? ' off' : ''}${full ? ' full' : ''}"
                           title="${esc(s.rooms[0] || '')}${s.instructors ? `\n${esc(s.instructors)}` : ''}${s.avail != null ? `\n${s.avail} seats left` : ''}">
                     <input type="checkbox" data-code="${esc(code)}" data-sec="${esc(s.section)}" ${off ? '' : 'checked'}>
                     <span class="sc-name">${esc(s.section)}</span>
-                    <span class="sc-time">${esc(times)}</span>
+                    <span class="sc-time">${esc(timesOf(s))}</span>
                   </label>`;
-              })
-              .join('');
-            return `<div class="sec-kind"><span class="sk-label">${esc(KIND_LABEL[kind] || kind)}</span>
-                      <div class="sec-chips">${chips}</div></div>`;
+              }).join('')}</div>`;
+            }
+
+            return `<div class="sec-kind">
+                <div class="sk-head"><span class="sk-label">${esc(label)}</span>${picker}</div>
+                ${body}
+              </div>`;
           })
           .join('');
 
-        return `<details class="sel-card" style="--accent:${color}">
+        const pins = pinsFor(code);
+        const badge = pins.length
+          ? `<span class="pin-badge" title="Locked sections">${pins.map(esc).join(' ')}</span>`
+          : '';
+
+        // Only offer a reset where there is something to undo.
+        const reset = isCustomised(code)
+          ? `<button class="btn tiny ghost rst" data-reset="${esc(code)}"
+               title="Reset ${esc(code)} — unlock every section and re-tick them all">↺</button>`
+          : '';
+
+        return `<details class="sel-card" style="--accent:${color}"${wasOpen.has(code) ? ' open' : ''}>
             <summary>
               <span class="dot"></span>
               <span class="sel-code">${esc(code)}</span>
               <span class="sel-title">${esc(course.title || '')}</span>
+              ${badge}
+              ${reset}
               <button class="btn tiny ghost rm" data-remove="${esc(code)}" title="Remove">✕</button>
             </summary>
             <div class="sel-body">${kinds}</div>
           </details>`;
       })
       .join('');
+
+    $('#btn-reset-sel').hidden = !state.selected.some(isCustomised);
+
+    const pane = box.closest('.vpane');
+    if (pane) pane.scrollTop = scrollTop;
   }
 
   /* --------------------------------------------------------- saved groups */
@@ -255,11 +370,15 @@
     const existing = groups.find((g) => g.name.toLowerCase() === name.toLowerCase());
     if (existing && !confirm(`"${existing.name}" already exists. Overwrite it?`)) return;
 
-    // Keep only the un-ticks that belong to the courses being saved.
+    // Keep only the un-ticks and pins that belong to the courses being saved.
     const disabled = {};
+    const pinned = {};
     for (const code of state.selected) {
       if (state.disabled[code] && state.disabled[code].length) {
         disabled[code] = state.disabled[code].slice();
+      }
+      if (state.pinned[code] && Object.keys(state.pinned[code]).length) {
+        pinned[code] = { ...state.pinned[code] };
       }
     }
 
@@ -268,6 +387,7 @@
       name,
       codes: state.selected.slice(),
       disabled,
+      pinned,
       saved: new Date().toISOString(),
     };
 
@@ -303,8 +423,10 @@
 
     state.selected = found;
     state.disabled = {};
+    state.pinned = {};
     for (const code of found) {
       if (group.disabled && group.disabled[code]) state.disabled[code] = group.disabled[code].slice();
+      if (group.pinned && group.pinned[code]) state.pinned[code] = { ...group.pinned[code] };
     }
     state.activeGroup = group.id;
     state.results = [];
@@ -396,7 +518,10 @@
       .filter(Boolean)
       .map((course) => ({
         ...course,
-        sections: course.sections.map((s) => ({ ...s, enabled: !isDisabled(course.code, s.section) })),
+        sections: course.sections.map((s) => ({
+          ...s,
+          enabled: !isDisabled(course.code, s.section) && allowedByPin(course.code, s),
+        })),
       }));
 
     statusEl.innerHTML = '<span class="muted">Working…</span>';
@@ -423,6 +548,17 @@
         );
       } else {
         bits.push(`<span class="warn">${esc(res.error || 'No timetables found.')}</span>`);
+        // A locked section is the likeliest culprit, and the generator can't
+        // know about it — it only sees the sections we handed it.
+        const locked = state.selected
+          .filter((c) => pinsFor(c).length)
+          .map((c) => `${c} ${pinsFor(c).join('+')}`);
+        if (locked.length) {
+          bits.push(
+            `<span class="note">You've locked ${esc(locked.join(', '))}. ` +
+            `If a locked lecture and tutorial belong to different groups they can't be taken together — set one back to “Any”.</span>`
+          );
+        }
       }
       if (res.truncated) {
         bits.push(`<span class="muted">Search capped at ${Generator.MAX_RESULTS.toLocaleString()} results — add constraints to narrow it down.</span>`);
@@ -891,6 +1027,7 @@
       localStorage.setItem(STORE_KEY, JSON.stringify({
         selected: state.selected,
         disabled: state.disabled,
+        pinned: state.pinned,
         constraints: {
           earliest: $('#c-earliest').value, latest: $('#c-latest').value,
           minfree: $('#c-minfree').value,
@@ -931,6 +1068,7 @@
     }
 
     state.disabled = saved.disabled || {};
+    state.pinned = saved.pinned || {};
     for (const code of saved.selected || []) {
       try {
         const course = await Catalog.getCourse(code);
@@ -952,11 +1090,19 @@
     });
 
     $('#selected-list').addEventListener('click', (e) => {
+      // Both live inside <summary>, so stop the click toggling the card.
+      const rs = e.target.closest('[data-reset]');
+      if (rs) { e.preventDefault(); resetCourse(rs.dataset.reset); return; }
       const rm = e.target.closest('[data-remove]');
       if (rm) { e.preventDefault(); removeCourse(rm.dataset.remove); }
     });
 
+    $('#btn-reset-sel').addEventListener('click', resetAllCourses);
+
     $('#selected-list').addEventListener('change', (e) => {
+      const pick = e.target.closest('.sk-pick');
+      if (pick) { setPin(pick.dataset.code, pick.dataset.kind, pick.value); return; }
+
       const cb = e.target.closest('input[type=checkbox][data-sec]');
       if (!cb) return;
       toggleSection(cb.dataset.code, cb.dataset.sec);
@@ -966,6 +1112,7 @@
     $('#btn-clear-sel').addEventListener('click', () => {
       state.selected = [];
       state.disabled = {};
+      state.pinned = {};
       state.results = [];
       unlinkGroup();
       groupMsg('');

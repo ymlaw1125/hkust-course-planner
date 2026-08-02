@@ -21,6 +21,28 @@ can silently fail to load:
 node scripts/serve.mjs
 ```
 
+## Locking a section
+
+Expand a selected course and each kind — Lecture, Tutorial, Lab — gets its own
+picker, defaulting to **Any**. Choose a specific section to lock it: useful when
+you're already pre-enrolled in a slot, or you want a particular lecturer. The
+options list the times and instructor so you can pick without cross-checking.
+
+Locking is per kind, so you can pin the lecture and leave the tutorial free (or
+the reverse). Locked kinds show what they're locked to instead of the exclusion
+checkboxes, which would be redundant. Pinned sections appear as a badge on the
+collapsed card, and are saved with [saved groups](#saved-groups) — so a
+pre-enrolled set reloads exactly as you left it.
+
+Note that a locked lecture and tutorial from different linked groups (`L1` with
+`T2C`) can't be taken together. That produces no timetables, and the planner
+says which sections you locked so you know what to loosen.
+
+Each customised course gets a **↺** button that puts it back to defaults — every
+kind on *Any*, every section re-ticked — and **Reset all** in the Selected header
+does the lot while keeping your courses (unlike *Clear*, which removes them).
+Both appear only when there is something to undo.
+
 ## Resizable layout
 
 The three columns, and the three sections of the left column (Course data /
