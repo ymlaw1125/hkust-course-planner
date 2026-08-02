@@ -165,8 +165,11 @@
           <option value="late">Latest start time</option>
           <option value="early">Earliest finish time</option>
           <option value="compact">Most compact overall</option>
+          <option value="rating">Best-rated professors</option>
         </select>
       </label>
+
+      <div id="rating-note" class="rating-note" hidden></div>
     </div>
 
     <button id="btn-generate" class="btn primary big">Generate timetables</button>
@@ -305,7 +308,7 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
         <li><strong>Pick your courses.</strong> Search, click to add. Expand a course to un-tick any section you can't or won't take (e.g. a lecture at 9am).</li>
         <li><strong>Lock a section</strong> if you need one. Expand a course and set its Lecture or Tutorial picker from <em>Any</em> to a specific section — for slots you're pre-enrolled in, or a lecturer you want. Leave the other kind on <em>Any</em> to keep the choice open.</li>
         <li><strong>Save the set.</strong> Once your courses are picked, name them under <em>Saved groups</em> and hit Save. Next time, one click restores the whole set — including any sections you un-ticked — so you never retype it.</li>
-        <li><strong>Set constraints</strong>, then hit <em>Generate</em>.</li>
+        <li><strong>Set constraints</strong>, then hit <em>Generate</em>. Sorting by <em>Best-rated professors</em> ranks timetables using instructor grades from <a href="https://ust-rankings.com" target="_blank" rel="noreferrer noopener">ust-rankings.com</a> — nothing is filtered out. Star individual courses to weigh only those.</li>
         <li><strong>Fill the gaps.</strong> Happy with a timetable but have room left? <em>+ Fill a gap</em> lists courses — any course, or one Common Core group — that slot into your free time without moving anything you've already got.</li>
         <li><strong>Browse every variant.</strong> The planner tries one section of each type (lecture + tutorial + lab) per course and keeps only combinations with zero clashes.</li>
       </ol>
@@ -317,6 +320,7 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
 
 <script src="data/index.js"></script>
 <script src="data/common-core.js"></script>
+<script src="data/ratings.js"></script>
 <script src="js/model.js"></script>
 <script src="js/parser.js"></script>
 <script src="js/generator.js"></script>

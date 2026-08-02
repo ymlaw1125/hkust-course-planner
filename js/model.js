@@ -149,6 +149,129 @@
     },
   };
 
+  /* Instructor ratings, snapshotted from ust-rankings.com by
+     scripts/scrape-ratings.mjs. Letters are theirs, not ours — the percentile
+     bands are copied from their published source so the grades shown here
+     match the grades on their site. */
+  const GRADE_BANDS = [
+    [0.9, 'A+'], [0.8, 'A'], [0.75, 'A-'], [0.6, 'B+'], [0.45, 'B'], [0.35, 'B-'],
+    [0.3, 'C+'], [0.25, 'C'], [0.2, 'C-'], [0.1, 'D'], [0.0, 'F'],
+  ];
+
+  const Ratings = {
+    data: null,
+    _aliases: null,
+
+    init() {
+      this.data = global.CATALOG_RATINGS || null;
+      this._aliases = null;
+      return this.data;
+    },
+
+    get ready() {
+      return !!(this.data && this.data.instructors);
+    },
+
+    /** Split a section's instructor field into individual people. */
+    names(str) {
+      if (!str || str === 'TBA') return [];
+      return str.split(';').map((s) => s.trim()).filter(Boolean);
+    },
+
+    /**
+     * The two sites spell the same person differently, in two consistent ways:
+     *
+     *   order    "CHAN, Cecia Ki"  vs  "CHAN, Ki Cecia"
+     *   fullness "MAK, Brian"      vs  "MAK, Brian Kan Wing"
+     *
+     * So split a name into a surname plus a set of given-name tokens and
+     * compare those instead of the raw string.
+     */
+    parseName(name) {
+      const i = name.indexOf(',');
+      const surname = (i < 0 ? name : name.slice(0, i)).trim().toUpperCase();
+      const given = (i < 0 ? '' : name.slice(i + 1)).toUpperCase().replace(/[.,]/g, ' ');
+      return { surname, tokens: given.split(/\s+/).filter(Boolean) };
+    },
+
+    normalKey(name) {
+      const { surname, tokens } = this.parseName(name);
+      return `${surname}|${tokens.slice().sort().join(' ')}`;
+    },
+
+    /** Indexes over the rated names, built once. */
+    aliases() {
+      if (this._aliases) return this._aliases;
+      const sameSet = new Map();
+      const bySurname = new Map();
+
+      for (const name of Object.keys((this.data && this.data.instructors) || {})) {
+        const k = this.normalKey(name);
+        if (!sameSet.has(k)) sameSet.set(k, []);
+        sameSet.get(k).push(name);
+
+        const { surname, tokens } = this.parseName(name);
+        if (!bySurname.has(surname)) bySurname.set(surname, []);
+        bySurname.get(surname).push({ name, tokens });
+      }
+
+      // Anything a key can't pin to exactly one person is dropped — showing no
+      // grade beats showing someone else's.
+      const unique = new Map();
+      for (const [k, names] of sameSet) if (names.length === 1) unique.set(k, names[0]);
+
+      this._aliases = { unique, bySurname };
+      return this._aliases;
+    },
+
+    of(name) {
+      if (!this.ready) return null;
+
+      const exact = this.data.instructors[name];
+      if (exact) return exact;
+
+      const { unique, bySurname } = this.aliases();
+
+      // Same given names, different order.
+      const permuted = unique.get(this.normalKey(name));
+      if (permuted) return this.data.instructors[permuted];
+
+      // One spelling is a shortening of the other. Only accept it when a
+      // single rated person with that surname is compatible.
+      const { surname, tokens } = this.parseName(name);
+      const subsetOf = (a, b) => a.length && a.every((t) => b.includes(t));
+      const hits = (bySurname.get(surname) || []).filter(
+        (c) => subsetOf(tokens, c.tokens) || subsetOf(c.tokens, tokens)
+      );
+      return hits.length === 1 ? this.data.instructors[hits[0].name] : null;
+    },
+
+    letter(p) {
+      const hit = GRADE_BANDS.find(([t]) => p >= t);
+      return hit ? hit[1] : 'F';
+    },
+
+    /**
+     * Mean percentile across a section's rated instructors, or null when none
+     * of them have a rating. Co-taught sections average out.
+     */
+    percentileOf(sec) {
+      const hits = this.names(sec.instructors).map((n) => this.of(n)).filter(Boolean);
+      if (!hits.length) return null;
+      return hits.reduce((sum, r) => sum + r.p, 0) / hits.length;
+    },
+
+    gradeOf(sec) {
+      const hits = this.names(sec.instructors).map((n) => this.of(n)).filter(Boolean);
+      if (!hits.length) return null;
+      // For one instructor use the letter as published rather than re-deriving
+      // it — that round-trip can disagree at a band boundary. Only a co-taught
+      // section has to be averaged.
+      if (hits.length === 1) return hits[0].g;
+      return this.letter(hits.reduce((sum, r) => sum + r.p, 0) / hits.length);
+    },
+  };
+
   const CommonCore = {
     data: null,
 
@@ -233,6 +356,7 @@
   }
 
   global.HK = {
-    DAYS, KIND_LABEL, KIND_ORDER, hhmm, meetingsOverlap, Catalog, CommonCore, sectionsByKind,
+    DAYS, KIND_LABEL, KIND_ORDER, hhmm, meetingsOverlap, Catalog, CommonCore, Ratings,
+    sectionsByKind,
   };
 })(window);

@@ -3,7 +3,7 @@
   'use strict';
 
   const {
-    DAYS, KIND_LABEL, KIND_ORDER, hhmm, Catalog, CommonCore, sectionsByKind,
+    DAYS, KIND_LABEL, KIND_ORDER, hhmm, Catalog, CommonCore, Ratings, sectionsByKind,
     Generator, Render, Parser,
   } = global.HK;
   const $ = (sel) => document.querySelector(sel);
@@ -16,6 +16,7 @@
     selected: [],         // course codes, in the order added
     disabled: {},         // code -> Set of section codes the user unticked
     pinned: {},           // code -> { KIND: section } forced choices, e.g. pre-enrolled
+    preferRated: {},      // code -> true, "weight this course's instructor rating"
     results: [],
     cursor: 0,
     courseOrder: new Map(),
@@ -28,6 +29,7 @@
   function boot() {
     const idx = Catalog.init();
     CommonCore.init();
+    Ratings.init();
     const status = $('#catalog-status');
     if (idx) {
       status.innerHTML =
@@ -178,6 +180,76 @@
     persist();
   }
 
+  /* ------------------------------------------------------ instructor rating */
+
+  /* The lecturer is who students actually mean by "a good prof", so a lecture
+     counts double a tutorial or lab (those are often run by TAs). */
+  const KIND_WEIGHT = (kind) => (kind === 'LEC' ? 1 : 0.5);
+
+  /** True when a section has nobody assigned yet, as opposed to an unrated one. */
+  function isUnassigned(sec) {
+    return !Ratings.names(sec.instructors).length;
+  }
+
+  /**
+   * Badge for a section: its letter grade, or "TBA" when the instructor hasn't
+   * been announced. A known instructor who simply has no rating gets nothing —
+   * that is a gap in the ratings data, not a fact about the section.
+   */
+  function gradeBadge(sec) {
+    const g = Ratings.gradeOf(sec);
+    if (g) {
+      const cls = g.replace('+', 'p').replace('-', 'm');
+      return `<span class="grade g${esc(cls)}">${esc(g)}</span>`;
+    }
+    if (isUnassigned(sec)) {
+      return '<span class="grade tba" title="Instructor not announced yet">TBA</span>';
+    }
+    return '';
+  }
+
+  /** Courses whose ratings count: the opted-in ones, or all if none opted in. */
+  function ratedScope() {
+    const chosen = state.selected.filter((c) => state.preferRated[c]);
+    return chosen.length ? new Set(chosen) : null; // null = every course
+  }
+
+  /**
+   * Weighted mean instructor percentile for a timetable, or null when nothing
+   * in scope has a rating. Unrated sections are skipped rather than counted as
+   * zero — a new lecturer shouldn't be treated as a bad one.
+   */
+  function timetableRating(tt, scope) {
+    let sum = 0;
+    let weight = 0;
+    for (const e of tt.entries) {
+      if (scope && !scope.has(e.course.code)) continue;
+      const p = Ratings.percentileOf(e.section);
+      if (p == null) continue;
+      const w = KIND_WEIGHT(e.section.kind);
+      sum += p * w;
+      weight += w;
+    }
+    return weight ? sum / weight : null;
+  }
+
+  function updateRatingNote() {
+    const note = $('#rating-note');
+    if (!Ratings.ready) {
+      note.hidden = $('#c-sort').value !== 'rating';
+      if (!note.hidden) {
+        note.innerHTML = '<span class="warn">No ratings data — run <code>node scripts/scrape-ratings.mjs</code>.</span>';
+      }
+      return;
+    }
+    const chosen = state.selected.filter((c) => state.preferRated[c]);
+    note.hidden = $('#c-sort').value !== 'rating';
+    if (note.hidden) return;
+    note.innerHTML = chosen.length
+      ? `Ranking on <strong>${esc(chosen.join(', '))}</strong> only. Star other courses to include them.`
+      : 'Ranking on <strong>every course</strong>. Star specific courses to weigh only those.';
+  }
+
   /** Has this course been customised away from its defaults? */
   function isCustomised(code) {
     return pinsFor(code).length > 0 || !!(state.disabled[code] && state.disabled[code].length);
@@ -245,13 +317,21 @@
               ? s.meetings.map((m) => `${DAYS[m.day]} ${hhmm(m.start)}`).join(' · ')
               : 'TBA');
 
+            // Names are "SURNAME, Given" and co-taught sections are joined by
+            // ";", so only the semicolon separates people.
+            const whoOf = (s) => {
+              const people = Ratings.names(s.instructors);
+              if (!people.length) return ' — TBA';
+              const g = Ratings.gradeOf(s);
+              return ` — ${people.join(', ')}${g ? ` (${g})` : ''}`;
+            };
+
             const picker = `<select class="sk-pick" data-code="${esc(code)}" data-kind="${esc(kind)}"
                               title="Pin a specific ${esc(label.toLowerCase())}, e.g. one you're already enrolled in">
                 <option value="">Any (${secs.length})</option>
-                ${secs.map((s) => {
-                  const who = s.instructors ? ` — ${s.instructors.split(/\s*[;,]\s*/)[0]}` : '';
-                  return `<option value="${esc(s.section)}"${pin === s.section ? ' selected' : ''}>${esc(s.section)} · ${esc(timesOf(s))}${esc(who)}</option>`;
-                }).join('')}
+                ${secs.map((s) =>
+                  `<option value="${esc(s.section)}"${pin === s.section ? ' selected' : ''}>${esc(s.section)} · ${esc(timesOf(s))}${esc(whoOf(s))}</option>`
+                ).join('')}
               </select>`;
 
             // With a kind pinned, its exclusion chips would be redundant, so
@@ -267,11 +347,14 @@
               body = `<div class="sec-chips">${secs.map((s) => {
                 const off = isDisabled(code, s.section);
                 const full = s.avail != null && s.avail <= 0;
+                const g = Ratings.gradeOf(s);
+                const who = isUnassigned(s) ? 'Instructor TBA' : s.instructors;
                 return `<label class="sec-chip${off ? ' off' : ''}${full ? ' full' : ''}"
-                          title="${esc(s.rooms[0] || '')}${s.instructors ? `\n${esc(s.instructors)}` : ''}${s.avail != null ? `\n${s.avail} seats left` : ''}">
+                          title="${esc(s.rooms[0] || '')}${who ? `\n${esc(who)}` : ''}${g ? `\nRated ${esc(g)}` : ''}${s.avail != null ? `\n${s.avail} seats left` : ''}">
                     <input type="checkbox" data-code="${esc(code)}" data-sec="${esc(s.section)}" ${off ? '' : 'checked'}>
                     <span class="sc-name">${esc(s.section)}</span>
                     <span class="sc-time">${esc(timesOf(s))}</span>
+                    ${gradeBadge(s)}
                   </label>`;
               }).join('')}</div>`;
             }
@@ -288,6 +371,12 @@
           ? `<span class="pin-badge" title="Locked sections">${pins.map(esc).join(' ')}</span>`
           : '';
 
+        const starred = !!state.preferRated[code];
+        const star = Ratings.ready
+          ? `<button class="btn tiny ghost star${starred ? ' on' : ''}" data-star="${esc(code)}"
+               title="${starred ? 'Included in' : 'Weigh only this course for'} the best-rated-professors sort">★</button>`
+          : '';
+
         // Only offer a reset where there is something to undo.
         const reset = isCustomised(code)
           ? `<button class="btn tiny ghost rst" data-reset="${esc(code)}"
@@ -300,6 +389,7 @@
               <span class="sel-code">${esc(code)}</span>
               <span class="sel-title">${esc(course.title || '')}</span>
               ${badge}
+              ${star}
               ${reset}
               <button class="btn tiny ghost rm" data-remove="${esc(code)}" title="Remove">✕</button>
             </summary>
@@ -538,6 +628,14 @@
       }
       const ms = Math.round(performance.now() - t0);
 
+      // The generator knows nothing about ratings, so rank here. Unrated
+      // timetables sort last rather than being dropped.
+      if (opts.sort === 'rating' && Ratings.ready) {
+        const scope = ratedScope();
+        for (const tt of res.timetables) tt.rating = timetableRating(tt, scope);
+        res.timetables.sort((a, b) => (b.rating == null ? -1 : b.rating) - (a.rating == null ? -1 : a.rating));
+      }
+
       state.results = res.timetables;
       state.cursor = 0;
 
@@ -591,7 +689,15 @@
         `<span class="stat"><b>${s.freeWeekdays}</b> day${s.freeWeekdays === 1 ? '' : 's'} off <small>${esc(offNames.join(', ') || '—')}</small></span>` +
         `<span class="stat"><b>${(s.totalGap / 60).toFixed(1)}h</b> idle between classes</span>` +
         `<span class="stat"><b>${s.earliestStart == null ? '–' : hhmm(s.earliestStart)}</b> earliest start</span>` +
-        `<span class="stat"><b>${s.latestEnd == null ? '–' : hhmm(s.latestEnd)}</b> latest finish</span>`;
+        `<span class="stat"><b>${s.latestEnd == null ? '–' : hhmm(s.latestEnd)}</b> latest finish</span>` +
+        (() => {
+          if (!Ratings.ready) return '';
+          const p = timetableRating(tt, ratedScope());
+          if (p == null) return '';
+          const scoped = state.selected.filter((c) => state.preferRated[c]).length;
+          return `<span class="stat"><b>${esc(Ratings.letter(p))}</b> avg instructor ` +
+                 `<small>${scoped ? `${scoped} starred course${scoped === 1 ? '' : 's'}` : 'all courses'}</small></span>`;
+        })();
     } else {
       meta.innerHTML = '';
     }
@@ -1028,6 +1134,7 @@
         selected: state.selected,
         disabled: state.disabled,
         pinned: state.pinned,
+        preferRated: state.preferRated,
         constraints: {
           earliest: $('#c-earliest').value, latest: $('#c-latest').value,
           minfree: $('#c-minfree').value,
@@ -1069,6 +1176,7 @@
 
     state.disabled = saved.disabled || {};
     state.pinned = saved.pinned || {};
+    state.preferRated = saved.preferRated || {};
     for (const code of saved.selected || []) {
       try {
         const course = await Catalog.getCourse(code);
@@ -1077,6 +1185,8 @@
     }
     reorderColors();
     renderSelected();
+    // Needs both the restored sort and the restored selection to be in place.
+    updateRatingNote();
   }
 
   /* --------------------------------------------------------- events */
@@ -1090,7 +1200,18 @@
     });
 
     $('#selected-list').addEventListener('click', (e) => {
-      // Both live inside <summary>, so stop the click toggling the card.
+      // These live inside <summary>, so stop the click toggling the card.
+      const st = e.target.closest('[data-star]');
+      if (st) {
+        e.preventDefault();
+        const code = st.dataset.star;
+        if (state.preferRated[code]) delete state.preferRated[code];
+        else state.preferRated[code] = true;
+        renderSelected();
+        updateRatingNote();
+        persist();
+        return;
+      }
       const rs = e.target.closest('[data-reset]');
       if (rs) { e.preventDefault(); resetCourse(rs.dataset.reset); return; }
       const rm = e.target.closest('[data-remove]');
@@ -1141,6 +1262,7 @@
     for (const sel of ['#c-earliest', '#c-latest', '#c-minfree', '#c-lunch', '#c-maxgap', '#c-maxperday', '#c-linked', '#c-skipfull', '#c-sort']) {
       $(sel).addEventListener('change', persist);
     }
+    $('#c-sort').addEventListener('change', updateRatingNote);
 
     $('#btn-prev').addEventListener('click', () => { if (state.cursor > 0) { state.cursor--; showResult(); } });
     $('#btn-next').addEventListener('click', () => { if (state.cursor < state.results.length - 1) { state.cursor++; showResult(); } });

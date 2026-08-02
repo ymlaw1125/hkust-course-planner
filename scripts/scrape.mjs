@@ -23,6 +23,19 @@ const CONCURRENCY = 6;
 
 const DAY_CODES = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
+/**
+ * Instructor cells are adjacent <a> tags with nothing between them, so simply
+ * stripping tags welds the names together ("SHEN, ShaojieWOO, Kam Tim").
+ * Pull each anchor out on its own and join with a semicolon — a comma would be
+ * ambiguous, since every name already contains one ("SHEN, Shaojie").
+ */
+function parseNameList(html) {
+  const names = [...html.matchAll(/<a[^>]*>([\s\S]*?)<\/a>/g)]
+    .map((m) => stripTags(m[1]).trim())
+    .filter(Boolean);
+  return names.length ? names.join('; ') : stripTags(html);
+}
+
 function stripTags(html) {
   return html
     .replace(/<br\s*\/?>/gi, ' | ')
@@ -168,8 +181,8 @@ function parseSubjectPage(html, subject) {
           group,
           meetings: [],
           rooms: [],
-          instructors: stripTags(cells[3] || ''),
-          ta: stripTags(cells[4] || ''),
+          instructors: parseNameList(cells[3] || ''),
+          ta: parseNameList(cells[4] || ''),
           quota: spanM ? parseInt(spanM[1], 10) : firstInt(stripTags(quotaCell)),
           enrol: firstInt(stripTags(cells[6] || '')),
           avail: firstInt(stripTags(cells[7] || '')),
@@ -297,8 +310,11 @@ async function main() {
   ].sort();
   console.log(`${subjects.length} subjects found`);
 
-  if (existsSync(OUT)) await rm(OUT, { recursive: true, force: true });
-  await mkdir(path.join(OUT, 'subjects'), { recursive: true });
+  // Clear only what this script owns. data/ also holds ratings.js from
+  // scrape-ratings.mjs, and wiping the whole directory silently deleted it.
+  const subjectsDir = path.join(OUT, 'subjects');
+  if (existsSync(subjectsDir)) await rm(subjectsDir, { recursive: true, force: true });
+  await mkdir(subjectsDir, { recursive: true });
 
   const index = [];
   let totalCourses = 0;

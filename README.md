@@ -21,6 +21,73 @@ can silently fail to load:
 node scripts/serve.mjs
 ```
 
+## Professor ratings
+
+Sort timetables by **Best-rated professors**. It's a ranking, not a filter — no
+timetable is ever removed, the better-taught ones just come first.
+
+By default every course counts. Click the **★** on a course to weigh *only* the
+starred ones — so you can insist on a good lecturer for your two hard majors and
+not care who teaches the rest. Lectures count double tutorials and labs, since
+tutorials are often run by TAs. Unrated instructors are skipped rather than
+scored zero: a new lecturer isn't a bad one.
+
+Grades appear on the section chips and in the lock picker, and each timetable
+shows its average. Three states are distinguished, because they mean different
+things:
+
+| Section | Shows |
+|---|---|
+| Instructor rated | their letter, e.g. `A+` |
+| Instructor still `TBA` | a muted **TBA** badge |
+| Instructor named but unrated | nothing |
+
+The last one is a gap in the ratings data, not a fact about the section — so it
+stays blank rather than claiming TBA. Of 3,093 sections: 2,104 rated, 839 TBA,
+150 named-but-unrated.
+
+### Where the data comes from
+
+Ratings are a snapshot of [ust-rankings.com](https://ust-rankings.com), fetched
+by `node scripts/scrape-ratings.mjs` into `data/ratings.js` (~146 KB).
+
+The letters are **theirs, not ours**. The scraper reproduces their published
+scoring formula, eligibility rule and percentile→letter thresholds from
+[ust-archive/ust-rankings](https://github.com/ust-archive/ust-rankings), so a
+grade here matches the grade on their site rather than being a scheme of our own
+invention. Verify with the printed grade distribution: the bands land exactly on
+10% / 10% / 5% / 15% … as their thresholds require.
+
+Two caveats worth knowing:
+
+- Ratings are **historical** — they come from past student surveys, so the
+  snapshot uses the most recent term with data (currently 2025-26 Summer), not
+  the term you're planning. A brand-new instructor has no rating at all;
+  **88%** of instructors in the catalog have one.
+
+### Matching names across the two sites
+
+The same person is often spelled differently by each site, in two consistent
+ways:
+
+| | catalog | ratings site |
+|---|---|---|
+| given names reordered | `CHAN, Cecia Ki` | `CHAN, Ki Cecia` |
+| one name abbreviated | `MAK, Brian` | `MAK, Brian Kan Wing` |
+
+So a name is compared as a surname plus a *set* of given-name tokens, not as a
+string. An exact string match is tried first, then a same-token-set match, then
+one where either side's tokens are a subset of the other's. Any of those is
+only accepted when it points at exactly one rated person — where a name could
+mean two people, no grade is shown rather than a guessed one. That recovers 17
+instructors (642 → 659) with no change to any name that already matched.
+
+It doesn't fix genuinely different data: someone absent from their dataset, or
+romanized differently, still shows no grade.
+- That project carries **no licence**, so this is a convenience copy of someone
+  else's work. Credit them, and don't treat the letters as objective fact —
+  they're a model over survey responses.
+
 ## Locking a section
 
 Expand a selected course and each kind — Lecture, Tutorial, Lab — gets its own
@@ -206,6 +273,8 @@ js/app.js             UI wiring, constraints, saved groups, fill-a-gap, localSto
 data/common-core.js   course -> Common Core group mapping (52 groups)
 scripts/scrape.mjs    catalog scraper
 scripts/serve.mjs     no-cache static server for development
+scripts/scrape-ratings.mjs  instructor ratings from ust-rankings.com
+data/ratings.js       instructor -> letter grade snapshot
 data/                 generated catalog
 ```
 

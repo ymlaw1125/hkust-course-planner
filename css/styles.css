@@ -268,6 +268,32 @@ body.resizing.y, body.resizing.y * { cursor: row-resize; }
 .sk-pinned strong { color: var(--fg); }
 .sk-when { color: var(--fg-3); font-size: 11px; }
 
+/* ---------------------------------------------------------------- ratings */
+.grade {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+  border-radius: 4px; padding: 0 4px; line-height: 15px;
+  background: var(--line); color: var(--fg-2); flex: none;
+}
+/* Green through red, matching how the source site reads them. */
+.grade.gAp, .grade.gA  { background: #16794133; color: #3fb950; }
+.grade.gAm, .grade.gBp { background: #1f6feb26; color: #6cb6ff; }
+.grade.gB,  .grade.gBm { background: #8b6d1e33; color: #d9a441; }
+.grade.gCp, .grade.gC, .grade.gCm { background: #9e5a0633; color: #e08c3b; }
+.grade.gD,  .grade.gF  { background: #8b1f2733; color: #f85149; }
+/* Nobody assigned yet — deliberately muted so it doesn't read as a grade. */
+.grade.tba { background: transparent; color: var(--fg-3); border: 1px dashed var(--line-2); }
+
+.sel-card .star { flex: none; color: var(--line-2); font-size: 12px; line-height: 1; }
+.sel-card .star:hover { color: var(--warn); }
+.sel-card .star.on { color: var(--warn); }
+
+.rating-note {
+  font-size: 11px; color: var(--fg-2); line-height: 1.45;
+  background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 8px;
+}
+.rating-note[hidden] { display: none; }
+
 .head-actions { display: flex; gap: 5px; align-items: center; }
 .sel-card .rst { flex: none; color: var(--fg-3); font-size: 13px; line-height: 1; }
 .sel-card .rst:hover { color: var(--accent); }
