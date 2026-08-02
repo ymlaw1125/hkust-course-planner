@@ -18,6 +18,7 @@
     cursor: 0,
     courseOrder: new Map(),
     activeGroup: null,    // id of the group currently loaded, for highlighting
+    fill: null,           // full result set of the last "fill a gap" search
   };
 
   /* --------------------------------------------------------- boot */
@@ -506,6 +507,7 @@
     const tt = state.results[state.cursor];
     if (!tt) return;
     refreshFillGroups();
+    state.fill = null;
     $('#fill-results').innerHTML = '';
     $('#fill-status').innerHTML =
       `<span class="muted">Searching against timetable ${state.cursor + 1} of ${state.results.length.toLocaleString()}.</span>`;
@@ -529,6 +531,7 @@
     const groupId = $('#fill-group').value;
     const status = $('#fill-status');
     const box = $('#fill-results');
+    state.fill = null;
     box.innerHTML = '';
 
     let candidateCodes;
@@ -567,17 +570,62 @@
       : `Common Core (${CommonCore.group(groupId).area})`;
 
     if (!matches.length) {
+      state.fill = null;
       status.innerHTML =
         `<span class="warn">Nothing in ${esc(scope)} fits this timetable without a clash.</span>` +
         `<div class="muted">Checked ${courses.length} course${courses.length === 1 ? '' : 's'}. Try another group, a different timetable variant, or loosen a constraint.</div>`;
       return;
     }
 
-    status.innerHTML =
-      `<span class="ok">${total} of ${courses.length} course${courses.length === 1 ? '' : 's'} in ${esc(scope)} fit.</span>` +
-      `<span class="muted"> (${ms} ms)${total > matches.length ? ` Showing the first ${matches.length}.` : ''}</span>`;
+    // Hold the full set so the search box can reach every match, not just the
+    // ones that happened to be rendered.
+    state.fill = { matches, total, scope, checked: courses.length, ms };
+    renderFillList();
+  }
 
-    box.innerHTML = matches.map(renderFillCard).join('');
+  const FILL_RENDER_CAP = 300;
+
+  function fillQuery() {
+    return $('#fill-search').value.trim().toLowerCase();
+  }
+
+  function renderFillList() {
+    const f = state.fill;
+    if (!f) return;
+    const status = $('#fill-status');
+    const box = $('#fill-results');
+    const q = fillQuery();
+
+    let shown = f.matches;
+    if (q) {
+      // "comp2011" should find "COMP 2011", so compare codes without spaces.
+      const bare = q.replace(/\s+/g, '');
+      shown = f.matches.filter(
+        (m) =>
+          m.course.code.toLowerCase().replace(/\s+/g, '').includes(bare) ||
+          (m.course.title || '').toLowerCase().includes(q)
+      );
+    }
+
+    const head =
+      `<span class="ok">${f.total} of ${f.checked} course${f.checked === 1 ? '' : 's'} in ${esc(f.scope)} fit.</span>` +
+      `<span class="muted"> (${f.ms} ms)</span>`;
+
+    if (q && !shown.length) {
+      status.innerHTML = `${head}<div class="warn">None of them match “${esc(q)}”.</div>`;
+      box.innerHTML = '';
+      return;
+    }
+
+    const capped = shown.slice(0, FILL_RENDER_CAP);
+    const note = q
+      ? `<div class="muted">${shown.length} match${shown.length === 1 ? '' : 'es'} “${esc(q)}”${shown.length > capped.length ? `, showing ${capped.length}` : ''}.</div>`
+      : shown.length > capped.length
+        ? `<div class="muted">Showing the first ${capped.length} — use the search box to narrow it down.</div>`
+        : '';
+
+    status.innerHTML = head + note;
+    box.innerHTML = capped.map(renderFillCard).join('');
   }
 
   function renderFillCard(m) {
@@ -600,7 +648,8 @@
         ? `<span class="fc-badge new">+${best.newDays} new day${best.newDays === 1 ? '' : 's'}</span>`
         : '<span class="fc-badge ok">fits your existing days</span>';
 
-    const alts = fits.length > 1 ? `<span class="fc-alts">${fits.length} section combos fit</span>` : '';
+    const n = m.fitCount != null ? m.fitCount : fits.length;
+    const alts = n > 1 ? `<span class="fc-alts">${n} section combos fit</span>` : '';
 
     return `<div class="fc">
         <div class="fc-main">
@@ -830,6 +879,14 @@
     $('#btn-ics').addEventListener('click', exportIcs);
     $('#btn-fill').addEventListener('click', openFill);
     $('#btn-find-fill').addEventListener('click', runFill);
+    $('#fill-search').addEventListener('input', renderFillList);
+    $('#fill-search').addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && fillQuery()) {
+        e.stopPropagation();           // don't let it close the modal too
+        $('#fill-search').value = '';
+        renderFillList();
+      }
+    });
     $('#fill-year').addEventListener('change', () => { refreshFillGroups(); persist(); });
     $('#fill-results').addEventListener('click', (e) => {
       const add = e.target.closest('[data-add]');

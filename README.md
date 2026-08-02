@@ -44,6 +44,12 @@ up from the data with no code change.
 
 Each hit shows when it meets, which sections fit, and whether it drags you onto
 campus on a **new day** — options that fit your existing days are listed first.
+
+Searching the whole catalog can return hundreds of hits, so there's a **search
+box** next to *Look in* that filters by code or title as you type (`sosc1440`
+finds `SOSC 1440`; `economy` matches titles). It filters the **full** result
+set, not just the 300 cards rendered — so a match sorted past the cutoff is
+still findable. Escape clears it without closing the dialog.
 **Add** puts the course in your selection, regenerates, and returns you to the
 same arrangement you were looking at with the new course slotted in.
 

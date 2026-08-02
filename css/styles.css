@@ -349,10 +349,17 @@ textarea {
 .modal-box.wide { width: min(880px, 100%); }
 
 .fill-controls {
-  display: grid; grid-template-columns: 150px 1fr auto; gap: 10px;
-  align-items: end; margin-bottom: 10px;
+  display: grid; grid-template-columns: 130px minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 10px; align-items: end; margin-bottom: 10px;
 }
 .fill-controls .btn { height: 30px; }
+.fill-controls input {
+  width: 100%; padding: 6px 9px;
+  background: var(--bg-3); color: var(--fg);
+  border: 1px solid var(--line-2); border-radius: 7px;
+  font-family: inherit; font-size: 12.5px;
+}
+.fill-controls input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 .fill-cohort {
   font-size: 12px; color: var(--fg-2); background: var(--bg-3);
@@ -393,7 +400,11 @@ textarea {
 .fc-badge.tba { color: var(--fg-3); border-color: var(--line-2); }
 .fc-add { flex: none; }
 
-@media (max-width: 620px) {
+@media (max-width: 760px) {
+  .fill-controls { grid-template-columns: 1fr 1fr; }
+  .fill-controls .btn { grid-column: 1 / -1; }
+}
+@media (max-width: 460px) {
   .fill-controls { grid-template-columns: 1fr; }
 }
 

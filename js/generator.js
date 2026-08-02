@@ -372,7 +372,7 @@
    * same constraints the timetable was generated under are applied again, so a
    * suggestion can't quietly eat a protected day off or lunch window.
    */
-  function findAdditions(candidates, timetable, opts, { limit = 300 } = {}) {
+  function findAdditions(candidates, timetable, opts, { keepFits = 8 } = {}) {
     const occupied = timetable.meetings;
     const usedDays = new Set(occupied.map((m) => m.day));
     const out = [];
@@ -408,7 +408,10 @@
         a.newDays - b.newDays ||
         (a.stats ? a.stats.totalGap : 0) - (b.stats ? b.stats.totalGap : 0)
       );
-      out.push({ course, fits, best: fits[0] });
+      // Only the best option is ever shown, so keep a handful and just count
+      // the rest — a course with thousands of legal bundles would otherwise
+      // pin all of them in memory for nothing.
+      out.push({ course, fits: fits.slice(0, keepFits), fitCount: fits.length, best: fits[0] });
     }
 
     out.sort((a, b) =>
@@ -417,7 +420,9 @@
       a.course.code.localeCompare(b.course.code)
     );
 
-    return { matches: out.slice(0, limit), total: out.length };
+    // Every match is returned so the caller can filter across the full set;
+    // capping the *rendered* list is the UI's job.
+    return { matches: out, total: out.length };
   }
 
   global.HK.Generator = { generate, buildBundles, analyse, findAdditions, MAX_RESULTS };
