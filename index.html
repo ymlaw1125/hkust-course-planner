@@ -189,7 +189,23 @@
         <span id="result-idx" class="idx">–</span>
         <button id="btn-next" class="btn small" disabled>›</button>
         <button id="btn-fill" class="btn small" disabled title="Find a course that fits the empty slots">+ Fill a gap</button>
-        <button id="btn-ics" class="btn small ghost" disabled title="Download .ics for your calendar">Export</button>
+        <details id="export-menu" class="menu">
+          <summary class="btn small ghost" title="Download this timetable">Export ▾</summary>
+          <div class="menu-body">
+            <button id="btn-png" class="menu-item">
+              <strong>Picture</strong><small>.png — share or print</small>
+            </button>
+            <button id="btn-csv" class="menu-item">
+              <strong>Spreadsheet</strong><small>.csv — opens in Excel</small>
+            </button>
+            <button id="btn-ics" class="menu-item">
+              <strong>Calendar</strong><small>.ics — Google/Outlook/Apple</small>
+            </button>
+            <button id="btn-planner" class="menu-item">
+              <strong>Planner file</strong><small>.json — reload it here later</small>
+            </button>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -235,7 +251,12 @@ T1A (1002)  Mo 09:00AM - 09:50AM       Rm 1104, Lift 19      TA            40   
     </div>
 
     <div class="tab-body hidden" data-body="json">
-      <p class="hint">Load a <code>courses.json</code> produced by <code>scripts/scrape.mjs</code>, or a previous export.</p>
+      <p class="hint">
+        Drop in a <strong>planner file</strong> (the <code>.json</code> from
+        <em>Export → Planner file</em>) to restore a whole setup — courses,
+        locked sections, constraints and all. A <code>courses.json</code> from
+        <code>scripts/scrape.mjs</code> works too, and just adds to the catalog.
+      </p>
       <input type="file" id="json-file" accept=".json,application/json">
       <div class="modal-actions">
         <button id="btn-export-json" class="btn ghost">Export current catalog</button>

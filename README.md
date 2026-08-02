@@ -21,6 +21,33 @@ can silently fail to load:
 node scripts/serve.mjs
 ```
 
+## Exporting
+
+**Export ▾** in the results header offers four formats:
+
+| | |
+|---|---|
+| **Picture** `.png` | The week as an image, drawn on a canvas — no library, works offline. Rendered dark-on-white regardless of theme so it prints and shares well, with a title, the option number and the course list baked in. |
+| **Spreadsheet** `.csv` | A half-hour grid you can read at a glance, then a table of every section with day, time, room and instructor. UTF-8 with a BOM so Excel opens it correctly on a double-click. |
+| **Calendar** `.ics` | Weekly repeating events for Google / Outlook / Apple Calendar. |
+| **Planner file** `.json` | Your whole setup — courses, un-ticked sections, locked sections, starred courses and every constraint. |
+
+It's `.csv` rather than a real `.xlsx`: writing a genuine Excel workbook means
+hand-rolling a ZIP container, and a CSV that reliably opens beats a binary that
+might not. Excel reads it natively.
+
+### Planner files
+
+Load one back through **Import / Paste → JSON file** to restore the session
+exactly. Imports are routed by shape — a planner file restores your setup, a
+`courses.json` from the scraper just adds to the catalog, so the old workflow
+still works.
+
+Planner files store course *codes*, not section times, so a re-scraped catalog
+stays the source of truth. If a course has since disappeared it says so and
+loads the rest; if the file was written for a different term it warns rather
+than silently mixing data.
+
 ## Professor ratings
 
 Sort timetables by **Best-rated professors**. It's a ranking, not a filter — no

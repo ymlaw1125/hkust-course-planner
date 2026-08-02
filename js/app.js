@@ -300,6 +300,7 @@
     if (!state.selected.length) {
       box.innerHTML = '<p class="empty">No courses selected yet. Search above and click a course to add it.</p>';
       $('#btn-reset-sel').hidden = true;
+      updateExportButtons();
       return;
     }
 
@@ -399,6 +400,7 @@
       .join('');
 
     $('#btn-reset-sel').hidden = !state.selected.some(isCustomised);
+    updateExportButtons();
 
     const pane = box.closest('.vpane');
     if (pane) pane.scrollTop = scrollTop;
@@ -674,7 +676,7 @@
 
     $('#btn-prev').disabled = !n || state.cursor === 0;
     $('#btn-next').disabled = !n || state.cursor >= n - 1;
-    $('#btn-ics').disabled = !n;
+    updateExportButtons();
     $('#btn-fill').disabled = !n;
     $('#result-idx').textContent = n ? `${state.cursor + 1} / ${n.toLocaleString()}` : '–';
 
@@ -1101,8 +1103,20 @@
   function doJsonFile(file) {
     const reader = new FileReader();
     reader.onload = () => {
+      let data;
       try {
-        const data = JSON.parse(reader.result);
+        data = JSON.parse(reader.result);
+      } catch (err) {
+        alert(`Could not read that file: ${err.message}`);
+        return;
+      }
+      // A planner file restores your whole setup; a plain course list just
+      // adds to the catalog. Tell them apart by the marker we write.
+      if (data && data.app === PLANNER_FILE.app) {
+        importPlanner(data);
+        return;
+      }
+      try {
         const list = Array.isArray(data) ? data : data.courses || [];
         Catalog.addCourses(list);
         runSearch();
@@ -1112,6 +1126,100 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  /* --------------------------------------------------- planner file format */
+
+  const PLANNER_FILE = { app: 'hkust-timetable-planner', version: 1 };
+
+  /**
+   * Everything needed to reproduce a session: which courses, which sections
+   * were ruled out or locked, and the constraints. Deliberately stores course
+   * *codes* rather than full section data, so a re-scraped catalog stays the
+   * source of truth for times and rooms.
+   */
+  function buildPlannerFile() {
+    return {
+      ...PLANNER_FILE,
+      exported: new Date().toISOString(),
+      term: (Catalog.index && Catalog.index.term) || null,
+      termName: (Catalog.index && Catalog.index.termName) || null,
+      selected: state.selected.slice(),
+      disabled: state.disabled,
+      pinned: state.pinned,
+      preferRated: state.preferRated,
+      constraints: {
+        earliest: $('#c-earliest').value, latest: $('#c-latest').value,
+        minfree: $('#c-minfree').value, lunch: $('#c-lunch').value,
+        maxgap: $('#c-maxgap').value, maxperday: $('#c-maxperday').value,
+        linked: $('#c-linked').checked, skipfull: $('#c-skipfull').checked,
+        sort: $('#c-sort').value,
+        freedays: [...document.querySelectorAll('#c-freedays .chip.on')].map((b) => +b.dataset.day),
+      },
+    };
+  }
+
+  function exportPlanner() {
+    const name = `hkust-planner-${new Date().toISOString().slice(0, 10)}.json`;
+    Render.download(name, JSON.stringify(buildPlannerFile(), null, 2), 'application/json');
+  }
+
+  async function importPlanner(data) {
+    if (state.selected.length && !confirm('Replace your current setup with this planner file?')) return;
+
+    const c = data.constraints || {};
+    const set = (sel, v) => { if (v !== undefined && v !== null) $(sel).value = v; };
+    set('#c-earliest', c.earliest); set('#c-latest', c.latest);
+    set('#c-minfree', c.minfree); set('#c-lunch', c.lunch);
+    set('#c-maxgap', c.maxgap); set('#c-maxperday', c.maxperday);
+    set('#c-sort', c.sort);
+    if (c.linked !== undefined) $('#c-linked').checked = c.linked;
+    if (c.skipfull !== undefined) $('#c-skipfull').checked = c.skipfull;
+    document.querySelectorAll('#c-freedays .chip').forEach((b) => b.classList.remove('on'));
+    for (const d of c.freedays || []) {
+      const chip = document.querySelector(`#c-freedays .chip[data-day="${d}"]`);
+      if (chip) chip.classList.add('on');
+    }
+
+    // Courses may have vanished since the file was written.
+    const found = [];
+    const missing = [];
+    for (const code of data.selected || []) {
+      let course = null;
+      try { course = await Catalog.getCourse(code); } catch (_) { course = null; }
+      (course ? found : missing).push(code);
+    }
+
+    state.selected = found;
+    state.disabled = {};
+    state.pinned = {};
+    state.preferRated = {};
+    for (const code of found) {
+      if (data.disabled && data.disabled[code]) state.disabled[code] = data.disabled[code].slice();
+      if (data.pinned && data.pinned[code]) state.pinned[code] = { ...data.pinned[code] };
+      if (data.preferRated && data.preferRated[code]) state.preferRated[code] = true;
+    }
+    state.results = [];
+    state.cursor = 0;
+    unlinkGroup();
+
+    reorderColors();
+    renderSelected();
+    runSearch();
+    showResult();
+    updateRatingNote();
+    persist();
+    document.querySelectorAll('.modal').forEach((m) => m.classList.add('hidden'));
+
+    const termNote = data.term && Catalog.index && data.term !== Catalog.index.term
+      ? ` <span class="warn">File is for term ${esc(data.term)}, your catalog is ${esc(Catalog.index.term)}.</span>`
+      : '';
+    $('#gen-status').innerHTML =
+      `<div><span class="ok">Loaded ${found.length} course${found.length === 1 ? '' : 's'} from the planner file.</span>${termNote}</div>` +
+      (missing.length
+        ? `<div><span class="warn">Not offered this term: ${esc(missing.join(', '))}.</span></div>`
+        : '') +
+      '<div class="muted">Hit Generate.</div>';
   }
 
   function exportJson() {
@@ -1124,6 +1232,53 @@
     const tt = state.results[state.cursor];
     if (!tt) return;
     Render.download(`hkust-timetable-${state.cursor + 1}.ics`, Render.toICS(tt, `Option ${state.cursor + 1}`), 'text/calendar');
+  }
+
+  /* The planner file describes your setup, so it's worth exporting as soon as
+     you've picked courses; everything else needs a generated timetable. */
+  function updateExportButtons() {
+    const n = state.results.length;
+    for (const sel of ['#btn-ics', '#btn-png', '#btn-csv']) $(sel).disabled = !n;
+    $('#btn-planner').disabled = !state.selected.length;
+    const menu = $('#export-menu');
+    const dead = !n && !state.selected.length;
+    menu.classList.toggle('disabled', dead);
+    if (dead) menu.open = false;
+  }
+
+  /** Heading printed onto the picture / spreadsheet so a shared file is self-explanatory. */
+  function exportTitle() {
+    const term = (Catalog.index && Catalog.index.termName) || '';
+    return `HKUST timetable${term ? ` — ${term}` : ''}`;
+  }
+
+  function exportSubtitle() {
+    const tt = state.results[state.cursor];
+    if (!tt) return '';
+    const s = tt.stats;
+    const codes = [...new Set(tt.entries.map((e) => e.course.code))].join(', ');
+    return `Option ${state.cursor + 1} of ${state.results.length.toLocaleString()}  ·  ` +
+           `${s.days} day${s.days === 1 ? '' : 's'} on campus  ·  ${codes}`;
+  }
+
+  async function exportPng() {
+    const tt = state.results[state.cursor];
+    if (!tt) return;
+    const ok = await Render.downloadPNG(
+      `hkust-timetable-${state.cursor + 1}.png`, tt, state.courseOrder,
+      { title: exportTitle(), subtitle: exportSubtitle() }
+    );
+    if (!ok) flash('Could not create the image.');
+  }
+
+  function exportCsv() {
+    const tt = state.results[state.cursor];
+    if (!tt) return;
+    Render.download(
+      `hkust-timetable-${state.cursor + 1}.csv`,
+      Render.toCSV(tt, { title: `${exportTitle()} — ${exportSubtitle()}` }),
+      'text/csv'
+    );
   }
 
   /* --------------------------------------------------------- persistence */
@@ -1266,7 +1421,16 @@
 
     $('#btn-prev').addEventListener('click', () => { if (state.cursor > 0) { state.cursor--; showResult(); } });
     $('#btn-next').addEventListener('click', () => { if (state.cursor < state.results.length - 1) { state.cursor++; showResult(); } });
-    $('#btn-ics').addEventListener('click', exportIcs);
+    // Close the menu after picking, so it doesn't hang open over the grid.
+    const closeExportMenu = () => { $('#export-menu').open = false; };
+    $('#btn-ics').addEventListener('click', () => { closeExportMenu(); exportIcs(); });
+    $('#btn-png').addEventListener('click', () => { closeExportMenu(); exportPng(); });
+    $('#btn-csv').addEventListener('click', () => { closeExportMenu(); exportCsv(); });
+    $('#btn-planner').addEventListener('click', () => { closeExportMenu(); exportPlanner(); });
+    document.addEventListener('click', (e) => {
+      const menu = $('#export-menu');
+      if (menu.open && !menu.contains(e.target)) menu.open = false;
+    });
     $('#btn-fill').addEventListener('click', openFill);
     $('#btn-find-fill').addEventListener('click', runFill);
     $('#fill-search').addEventListener('input', renderFillList);
