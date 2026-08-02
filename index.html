@@ -159,6 +159,7 @@
         <button id="btn-prev" class="btn small" disabled>‹</button>
         <span id="result-idx" class="idx">–</span>
         <button id="btn-next" class="btn small" disabled>›</button>
+        <button id="btn-fill" class="btn small" disabled title="Find a course that fits the empty slots">+ Fill a gap</button>
         <button id="btn-ics" class="btn small ghost" disabled title="Download .ics for your calendar">Export</button>
       </div>
     </div>
@@ -223,6 +224,46 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
   </div>
 </div>
 
+<!-- ================= FILL A GAP MODAL ================= -->
+<div id="modal-fill" class="modal hidden">
+  <div class="modal-box wide">
+    <div class="modal-head">
+      <h3>Add a course to this timetable</h3>
+      <button class="btn ghost small" data-close>✕</button>
+    </div>
+
+    <p class="hint">
+      Your current timetable stays exactly as it is. These are the courses whose
+      lecture <em>and</em> tutorial/lab all land in your free time, while still
+      respecting the constraints you set.
+    </p>
+
+    <div class="fill-controls">
+      <label class="ctl">
+        <span>Your year of study</span>
+        <select id="fill-year">
+          <option value="1">Year 1</option>
+          <option value="2">Year 2</option>
+          <option value="3">Year 3</option>
+          <option value="4">Year 4</option>
+          <option value="5">Year 5+</option>
+        </select>
+      </label>
+
+      <label class="ctl">
+        <span>Look in</span>
+        <select id="fill-group"></select>
+      </label>
+
+      <button id="btn-find-fill" class="btn primary">Find courses</button>
+    </div>
+
+    <div id="fill-cohort" class="fill-cohort"></div>
+    <div id="fill-status" class="fill-status"></div>
+    <div id="fill-results" class="fill-results"></div>
+  </div>
+</div>
+
 <!-- ================= HELP MODAL ================= -->
 <div id="modal-help" class="modal hidden">
   <div class="modal-box">
@@ -233,6 +274,7 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
         <li><strong>Pick your courses.</strong> Search, click to add. Expand a course to un-tick any section you can't or won't take (e.g. a lecture at 9am).</li>
         <li><strong>Save the set.</strong> Once your courses are picked, name them under <em>Saved groups</em> and hit Save. Next time, one click restores the whole set — including any sections you un-ticked — so you never retype it.</li>
         <li><strong>Set constraints</strong>, then hit <em>Generate</em>.</li>
+        <li><strong>Fill the gaps.</strong> Happy with a timetable but have room left? <em>+ Fill a gap</em> lists courses — any course, or one Common Core group — that slot into your free time without moving anything you've already got.</li>
         <li><strong>Browse every variant.</strong> The planner tries one section of each type (lecture + tutorial + lab) per course and keeps only combinations with zero clashes.</li>
       </ol>
       <p><strong>Linked sections:</strong> HKUST usually ties tutorial <code>T1A</code> and lab <code>LA1</code> to lecture <code>L1</code>. That's enforced by default. If a course has shared tutorials across lectures, the planner detects it and relaxes the rule automatically for that course.</p>
@@ -242,6 +284,7 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
 </div>
 
 <script src="data/index.js"></script>
+<script src="data/common-core.js"></script>
 <script src="js/model.js"></script>
 <script src="js/parser.js"></script>
 <script src="js/generator.js"></script>

@@ -227,6 +227,64 @@ async function mapLimit(items, limit, fn) {
   return results;
 }
 
+// ---------------------------------------------------------------- common core
+
+/**
+ * Common Core group pages use exactly the same markup as subject pages, so we
+ * only need the course codes — every one of them is already in the subject
+ * data, section times included.
+ */
+async function scrapeCommonCore(home) {
+  const seen = new Map();
+  const re = new RegExp(
+    `href="/wcq/cgi-bin/${TERM}/common_core/([A-Z0-9]+)(?:/(\\d+))?"[^>]*>([^<]*)<`,
+    'g'
+  );
+  for (const m of home.matchAll(re)) {
+    const [, cohort, num, label] = m;
+    const key = num ? `${cohort}/${num}` : cohort;
+    if (!seen.has(key)) seen.set(key, { cohort, num: num || null, label: label.trim() });
+  }
+
+  const cohorts = [];
+  const groups = [];
+  for (const [key, info] of seen) {
+    if (!info.num) {
+      cohorts.push({ id: info.cohort, label: info.label });
+    } else {
+      const area = /Common Core \(([^)]+)\)/.exec(info.label);
+      groups.push({
+        id: key,
+        cohort: info.cohort,
+        area: area ? area[1] : info.label,
+        label: info.label,
+        courses: [],
+      });
+    }
+  }
+
+  console.log(`${cohorts.length} cohorts, ${groups.length} common core groups`);
+
+  let done = 0;
+  await mapLimit(groups, CONCURRENCY, async (g) => {
+    try {
+      const html = await fetchText(`${BASE}/common_core/${g.id}`);
+      const codes = [
+        ...html.matchAll(/<div class=['"]subject['"]>([A-Z]{2,5})\s*(\d{4}[A-Z]*)\s*-/g),
+      ].map((m) => `${m[1]} ${m[2]}`);
+      g.courses = [...new Set(codes)].sort();
+    } catch (err) {
+      console.warn(`  ! common core ${g.id}: ${err.message}`);
+    }
+    done++;
+    process.stdout.write(`\r  ${done}/${groups.length} groups…   `);
+  });
+
+  const withCourses = groups.filter((g) => g.courses.length).length;
+  console.log(`\n  ${withCourses}/${groups.length} groups have offerings this term`);
+  return { cohorts, groups };
+}
+
 // ---------------------------------------------------------------- main
 
 async function main() {
@@ -274,6 +332,13 @@ async function main() {
   });
 
   index.sort((a, b) => a.c.localeCompare(b.c));
+
+  const commonCore = await scrapeCommonCore(home);
+  await writeFile(
+    path.join(OUT, 'common-core.js'),
+    `window.CATALOG_COMMON_CORE=${JSON.stringify(commonCore)};\n`,
+    'utf8'
+  );
 
   const meta = {
     term: TERM,

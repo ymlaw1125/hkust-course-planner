@@ -59,6 +59,30 @@
       return p;
     },
 
+    /** Pull in every subject file. Needed only for "any course" searches. */
+    async loadAll(onProgress) {
+      const subjects = (this.index && this.index.subjects) || [];
+      let done = 0;
+      for (const s of subjects) {
+        try { await this.loadSubject(s); } catch (_) { /* skip a missing file */ }
+        done++;
+        if (onProgress) onProgress(done, subjects.length);
+      }
+    },
+
+    /** Resolve many codes at once, loading only the subjects involved. */
+    async getCourses(codes) {
+      const subjects = new Set();
+      for (const code of codes) {
+        const entry = this.index && this.index.courses.find((e) => e.c === code);
+        subjects.add(entry ? entry.s : String(code).split(' ')[0]);
+      }
+      for (const s of subjects) {
+        try { await this.loadSubject(s); } catch (_) { /* skip */ }
+      }
+      return codes.map((c) => this.courses.get(c)).filter(Boolean);
+    },
+
     async getCourse(code) {
       if (this.courses.has(code)) return this.courses.get(code);
       const entry = this.index && this.index.courses.find((e) => e.c === code);
@@ -119,6 +143,68 @@
     },
   };
 
+  const CommonCore = {
+    data: null,
+
+    init() {
+      this.data = global.CATALOG_COMMON_CORE || null;
+      return this.data;
+    },
+
+    get ready() {
+      return !!(this.data && this.data.groups && this.data.groups.length);
+    },
+
+    /** Academic year the current term belongs to, e.g. "2610" -> 2026. */
+    termStartYear() {
+      const t = (Catalog.index && Catalog.index.term) || '';
+      const yy = parseInt(String(t).slice(0, 2), 10);
+      return Number.isFinite(yy) ? 2000 + yy : new Date().getFullYear();
+    },
+
+    /** Year 1 in 2026-27 means admitted 2026; year 3 means admitted 2024. */
+    admissionYear(yearOfStudy) {
+      return this.termStartYear() - (Math.max(1, yearOfStudy) - 1);
+    },
+
+    /**
+     * Pick the cohort scheme for an admission year. Cohort ids encode the first
+     * year they apply to (CC22, CC25, CC26...), so the newest scheme at or
+     * below the admission year wins; anything older falls back to 4Y. Written
+     * generically so a future CC27 works without a code change.
+     */
+    cohortFor(yearOfStudy) {
+      if (!this.ready) return null;
+      const adm = this.admissionYear(yearOfStudy);
+      const dated = this.data.cohorts
+        .map((c) => {
+          const m = /^CC(\d{2})$/.exec(c.id);
+          return m ? { ...c, from: 2000 + parseInt(m[1], 10) } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.from - a.from);
+
+      const hit = dated.find((c) => adm >= c.from);
+      if (hit) return hit.id;
+      const legacy = this.data.cohorts.find((c) => !/^CC\d{2}$/.test(c.id));
+      return legacy ? legacy.id : (dated.length ? dated[dated.length - 1].id : null);
+    },
+
+    cohortLabel(id) {
+      const c = this.data && this.data.cohorts.find((x) => x.id === id);
+      return c ? c.label : id;
+    },
+
+    groupsFor(cohortId) {
+      if (!this.ready) return [];
+      return this.data.groups.filter((g) => g.cohort === cohortId);
+    },
+
+    group(id) {
+      return this.ready ? this.data.groups.find((g) => g.id === id) : null;
+    },
+  };
+
   function normalizeSection(s) {
     if (!s.meetings) s.meetings = [];
     if (!s.rooms) s.rooms = [];
@@ -140,5 +226,7 @@
     );
   }
 
-  global.HK = { DAYS, KIND_LABEL, KIND_ORDER, hhmm, meetingsOverlap, Catalog, sectionsByKind };
+  global.HK = {
+    DAYS, KIND_LABEL, KIND_ORDER, hhmm, meetingsOverlap, Catalog, CommonCore, sectionsByKind,
+  };
 })(window);

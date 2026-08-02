@@ -21,6 +21,35 @@ can silently fail to load:
 node scripts/serve.mjs
 ```
 
+## Fill a gap
+
+Once you have a timetable you like, **+ Fill a gap** finds courses that drop
+into the empty slots. Your current timetable is held fixed — nothing already on
+it moves — so a course only qualifies if its lecture *and* its tutorial/lab all
+land in free time. The constraints you generated under still apply, so a
+suggestion can't quietly eat a protected day off or your lunch window.
+
+Search either the whole catalog or one Common Core group. You pick your **year
+of study** and the right Common Core scheme is derived from it:
+
+| Year (in 2026-27) | Admitted | Scheme |
+|---|---|---|
+| 1 | 2026 | CC26 |
+| 2 | 2025 | CC25 |
+| 3–5 | 2022–24 | CC22 |
+| earlier | before 2022 | 4Y |
+
+The cohort ids encode the first year they apply to, so a future `CC27` is picked
+up from the data with no code change.
+
+Each hit shows when it meets, which sections fit, and whether it drags you onto
+campus on a **new day** — options that fit your existing days are listed first.
+**Add** puts the course in your selection, regenerates, and returns you to the
+same arrangement you were looking at with the new course slotted in.
+
+Group listings come from `data/common-core.js` (**42 of 52** groups have
+offerings this term; the rest are shown as empty rather than looking broken).
+
 ## Saved groups
 
 Pick your courses, type a name under **Saved groups**, hit Save. One click
@@ -121,7 +150,8 @@ js/model.js           catalog + lazy subject loading
 js/generator.js       bundle building, conflict search, scoring
 js/render.js          weekly grid, section cards, .ics export
 js/parser.js          paste / manual import
-js/app.js             UI wiring, constraints, saved groups, localStorage
+js/app.js             UI wiring, constraints, saved groups, fill-a-gap, localStorage
+data/common-core.js   course -> Common Core group mapping (52 groups)
 scripts/scrape.mjs    catalog scraper
 scripts/serve.mjs     no-cache static server for development
 data/                 generated catalog

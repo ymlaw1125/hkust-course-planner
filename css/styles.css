@@ -345,6 +345,58 @@ textarea {
 .modal-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; }
 .parse-report { margin-top: 10px; font-size: 12.5px; }
 
+/* ---------------------------------------------------------------- fill a gap */
+.modal-box.wide { width: min(880px, 100%); }
+
+.fill-controls {
+  display: grid; grid-template-columns: 150px 1fr auto; gap: 10px;
+  align-items: end; margin-bottom: 10px;
+}
+.fill-controls .btn { height: 30px; }
+
+.fill-cohort {
+  font-size: 12px; color: var(--fg-2); background: var(--bg-3);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 6px 10px; margin-bottom: 9px;
+}
+.fill-cohort small { display: block; color: var(--fg-3); font-size: 11px; }
+
+.fill-status { font-size: 12.5px; margin-bottom: 9px; }
+.fill-status:empty { display: none; }
+
+.fill-results { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
+
+.fc {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 10px; background: var(--bg-3);
+}
+.fc-main { flex: 1; min-width: 0; }
+.fc-top { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.fc-title { color: var(--fg-2); font-size: 12px; }
+.fc-when { font-size: 11.5px; color: var(--fg-2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.fc-secs { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
+.fc-sec {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  background: var(--bg-2); border: 1px solid var(--line-2);
+  border-radius: 5px; padding: 1px 6px; font-size: 11px; font-weight: 600;
+}
+.fc-sec small { color: var(--fg-3); font-weight: normal; font-size: 10px; }
+.fc-alts { font-size: 10.5px; color: var(--fg-3); }
+
+.fc-badge {
+  font-size: 10px; padding: 1px 7px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: .04em; border: 1px solid transparent;
+}
+.fc-badge.ok { color: var(--ok); border-color: var(--ok); }
+.fc-badge.new { color: var(--warn); border-color: var(--warn); }
+.fc-badge.tba { color: var(--fg-3); border-color: var(--line-2); }
+.fc-add { flex: none; }
+
+@media (max-width: 620px) {
+  .fill-controls { grid-template-columns: 1fr; }
+}
+
 .help { font-size: 13px; color: var(--fg-2); line-height: 1.6; }
 .help ol { padding-left: 20px; }
 .help li { margin-bottom: 7px; }

@@ -2,7 +2,9 @@
 (function (global) {
   'use strict';
 
-  const { DAYS, KIND_LABEL, hhmm, Catalog, sectionsByKind, Generator, Render, Parser } = global.HK;
+  const {
+    DAYS, KIND_LABEL, hhmm, Catalog, CommonCore, sectionsByKind, Generator, Render, Parser,
+  } = global.HK;
   const $ = (sel) => document.querySelector(sel);
   const esc = Render.escapeHtml;
 
@@ -22,6 +24,7 @@
 
   function boot() {
     const idx = Catalog.init();
+    CommonCore.init();
     const status = $('#catalog-status');
     if (idx) {
       status.innerHTML =
@@ -436,6 +439,7 @@
     $('#btn-prev').disabled = !n || state.cursor === 0;
     $('#btn-next').disabled = !n || state.cursor >= n - 1;
     $('#btn-ics').disabled = !n;
+    $('#btn-fill').disabled = !n;
     $('#result-idx').textContent = n ? `${state.cursor + 1} / ${n.toLocaleString()}` : '–';
 
     const meta = $('#result-meta');
@@ -456,6 +460,196 @@
 
     Render.renderGrid($('#grid-wrap'), tt, state.courseOrder);
     Render.renderSectionList($('#result-sections'), tt, state.courseOrder);
+  }
+
+  /* --------------------------------------------------------- fill a gap */
+
+  function currentYear() {
+    return parseInt($('#fill-year').value, 10) || 1;
+  }
+
+  function refreshFillGroups() {
+    const sel = $('#fill-group');
+    const keep = sel.value;
+    const cohortNote = $('#fill-cohort');
+
+    if (!CommonCore.ready) {
+      sel.innerHTML = '<option value="*">Any course in the catalog</option>';
+      cohortNote.innerHTML =
+        '<span class="warn">No Common Core data found — run <code>node scripts/scrape.mjs</code> to add it.</span>';
+      return;
+    }
+
+    const cohort = CommonCore.cohortFor(currentYear());
+    const groups = CommonCore.groupsFor(cohort);
+    const withCourses = groups.filter((g) => g.courses.length);
+
+    cohortNote.innerHTML =
+      `Year ${currentYear()} → admitted ${CommonCore.admissionYear(currentYear())} → ` +
+      `<strong>${esc(CommonCore.cohortLabel(cohort))}</strong>` +
+      `<small>${withCourses.length} of ${groups.length} groups have courses this term</small>`;
+
+    sel.innerHTML =
+      '<option value="*">Any course in the catalog</option>' +
+      withCourses
+        .map((g) => `<option value="${esc(g.id)}">Common Core (${esc(g.area)}) — ${g.courses.length}</option>`)
+        .join('') +
+      groups
+        .filter((g) => !g.courses.length)
+        .map((g) => `<option value="${esc(g.id)}" disabled>Common Core (${esc(g.area)}) — none this term</option>`)
+        .join('');
+
+    if ([...sel.options].some((o) => o.value === keep && !o.disabled)) sel.value = keep;
+  }
+
+  function openFill() {
+    const tt = state.results[state.cursor];
+    if (!tt) return;
+    refreshFillGroups();
+    $('#fill-results').innerHTML = '';
+    $('#fill-status').innerHTML =
+      `<span class="muted">Searching against timetable ${state.cursor + 1} of ${state.results.length.toLocaleString()}.</span>`;
+    $('#modal-fill').classList.remove('hidden');
+  }
+
+  async function runFill() {
+    try {
+      await runFillInner();
+    } catch (err) {
+      $('#fill-status').innerHTML =
+        `<span class="warn">Search failed: ${esc(err.message)}</span>`;
+      console.error('[fill]', err);
+    }
+  }
+
+  async function runFillInner() {
+    const tt = state.results[state.cursor];
+    if (!tt) return;
+
+    const groupId = $('#fill-group').value;
+    const status = $('#fill-status');
+    const box = $('#fill-results');
+    box.innerHTML = '';
+
+    let candidateCodes;
+    if (groupId === '*') {
+      status.innerHTML = '<span class="muted">Loading the full catalog…</span>';
+      await new Promise((r) => setTimeout(r, 20));
+      await Catalog.loadAll((done, total) => {
+        if (done % 12 === 0 || done === total) {
+          status.innerHTML = `<span class="muted">Loading the full catalog… ${done}/${total}</span>`;
+        }
+      });
+      candidateCodes = Catalog.index.courses.map((e) => e.c);
+    } else {
+      const group = CommonCore.group(groupId);
+      if (!group) return;
+      candidateCodes = group.courses;
+    }
+
+    // Never suggest something already on the timetable.
+    const already = new Set(state.selected);
+    candidateCodes = candidateCodes.filter((c) => !already.has(c));
+
+    status.innerHTML = '<span class="muted">Loading course data…</span>';
+    await new Promise((r) => setTimeout(r, 20));
+    const courses = await Catalog.getCourses(candidateCodes);
+
+    status.innerHTML = '<span class="muted">Checking which ones fit…</span>';
+    await new Promise((r) => setTimeout(r, 20));
+    const opts = readOptions();
+    const t0 = performance.now();
+    const { matches, total } = Generator.findAdditions(courses, tt, opts);
+    const ms = Math.round(performance.now() - t0);
+
+    const scope = groupId === '*'
+      ? 'the whole catalog'
+      : `Common Core (${CommonCore.group(groupId).area})`;
+
+    if (!matches.length) {
+      status.innerHTML =
+        `<span class="warn">Nothing in ${esc(scope)} fits this timetable without a clash.</span>` +
+        `<div class="muted">Checked ${courses.length} course${courses.length === 1 ? '' : 's'}. Try another group, a different timetable variant, or loosen a constraint.</div>`;
+      return;
+    }
+
+    status.innerHTML =
+      `<span class="ok">${total} of ${courses.length} course${courses.length === 1 ? '' : 's'} in ${esc(scope)} fit.</span>` +
+      `<span class="muted"> (${ms} ms)${total > matches.length ? ` Showing the first ${matches.length}.` : ''}</span>`;
+
+    box.innerHTML = matches.map(renderFillCard).join('');
+  }
+
+  function renderFillCard(m) {
+    const { course, best, fits } = m;
+    const when = best.tba
+      ? 'No fixed meeting time (TBA)'
+      : best.meetings
+          .slice()
+          .sort((a, b) => a.day - b.day || a.start - b.start)
+          .map((x) => `${DAYS[x.day]} ${hhmm(x.start)}–${hhmm(x.end)}`)
+          .join(' · ');
+
+    const secs = best.sections
+      .map((s) => `<span class="fc-sec">${esc(s.section)}<small>${esc(KIND_LABEL[s.kind] || s.kind)}</small></span>`)
+      .join('');
+
+    const badge = best.tba
+      ? '<span class="fc-badge tba">TBA</span>'
+      : best.newDays > 0
+        ? `<span class="fc-badge new">+${best.newDays} new day${best.newDays === 1 ? '' : 's'}</span>`
+        : '<span class="fc-badge ok">fits your existing days</span>';
+
+    const alts = fits.length > 1 ? `<span class="fc-alts">${fits.length} section combos fit</span>` : '';
+
+    return `<div class="fc">
+        <div class="fc-main">
+          <div class="fc-top">
+            <strong>${esc(course.code)}</strong>
+            <span class="fc-title">${esc(course.title || '')}</span>
+            ${course.credits ? `<span class="pill">${course.credits}u</span>` : ''}
+            ${badge}
+          </div>
+          <div class="fc-when">${esc(when)}</div>
+          <div class="fc-secs">${secs}${alts}</div>
+        </div>
+        <button class="btn small primary fc-add" data-add="${esc(course.code)}">Add</button>
+      </div>`;
+  }
+
+  async function addFromFill(code) {
+    const before = state.results[state.cursor];
+    // Remember exactly what was on screen so we can return to it afterwards.
+    const priorSections = before
+      ? before.entries.map((e) => `${e.course.code}|${e.section.section}`).sort().join(',')
+      : null;
+
+    await addCourse(code);
+    document.querySelectorAll('.modal').forEach((m) => m.classList.add('hidden'));
+
+    generate();
+
+    // generate() defers its work, so wait for the results before re-anchoring.
+    setTimeout(() => {
+      if (!priorSections || !state.results.length) return;
+      const idx = state.results.findIndex((tt) => {
+        const set = new Set(tt.entries.map((e) => `${e.course.code}|${e.section.section}`));
+        return priorSections.split(',').every((k) => set.has(k));
+      });
+      if (idx >= 0) {
+        state.cursor = idx;
+        showResult();
+        $('#gen-status').insertAdjacentHTML(
+          'beforeend',
+          `<div><span class="ok">Added ${esc(code)} — showing your previous timetable with it slotted in.</span></div>`
+        );
+      } else {
+        $('#gen-status').insertAdjacentHTML(
+          'beforeend',
+          `<div><span class="note">Added ${esc(code)}, but your previous arrangement isn't in the first ${state.results.length.toLocaleString()} results — showing the best match instead.</span></div>`
+        );
+      }
+    }, 240);
   }
 
   /* --------------------------------------------------------- import */
@@ -538,6 +732,7 @@
           freedays: [...document.querySelectorAll('#c-freedays .chip.on')].map((b) => +b.dataset.day),
         },
         theme: document.documentElement.dataset.theme,
+        year: $('#fill-year').value,
       }));
     } catch (_) { /* storage disabled — not fatal */ }
   }
@@ -548,6 +743,7 @@
     if (!saved) return;
 
     if (saved.theme) document.documentElement.dataset.theme = saved.theme;
+    if (saved.year) $('#fill-year').value = saved.year;
 
     const c = saved.constraints || {};
     if (c.earliest) $('#c-earliest').value = c.earliest;
@@ -632,6 +828,13 @@
     $('#btn-prev').addEventListener('click', () => { if (state.cursor > 0) { state.cursor--; showResult(); } });
     $('#btn-next').addEventListener('click', () => { if (state.cursor < state.results.length - 1) { state.cursor++; showResult(); } });
     $('#btn-ics').addEventListener('click', exportIcs);
+    $('#btn-fill').addEventListener('click', openFill);
+    $('#btn-find-fill').addEventListener('click', runFill);
+    $('#fill-year').addEventListener('change', () => { refreshFillGroups(); persist(); });
+    $('#fill-results').addEventListener('click', (e) => {
+      const add = e.target.closest('[data-add]');
+      if (add) addFromFill(add.dataset.add);
+    });
 
     document.addEventListener('keydown', (e) => {
       if (e.target.matches('input, textarea, select')) return;

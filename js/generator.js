@@ -361,5 +361,64 @@
       : `Clash-free timetables exist, but none satisfies ${list}. ${advice}`;
   }
 
-  global.HK.Generator = { generate, buildBundles, analyse, MAX_RESULTS };
+  /* ------------------------------------------------------------ additions */
+
+  /**
+   * Which of `candidates` can be dropped into `timetable` without moving
+   * anything that's already there?
+   *
+   * The current timetable is held fixed, so a course only qualifies if one of
+   * its whole bundles (lecture *and* its tutorial/lab) lands in free time. The
+   * same constraints the timetable was generated under are applied again, so a
+   * suggestion can't quietly eat a protected day off or lunch window.
+   */
+  function findAdditions(candidates, timetable, opts, { limit = 300 } = {}) {
+    const occupied = timetable.meetings;
+    const usedDays = new Set(occupied.map((m) => m.day));
+    const out = [];
+
+    for (const course of candidates) {
+      const { bundles } = buildBundles(course, opts);
+      const fits = [];
+
+      for (const sections of bundles) {
+        const meetings = sections.flatMap((s) => s.meetings);
+
+        // No scheduled time at all — it can't clash, but flag it as unplaced.
+        if (!meetings.length) {
+          fits.push({ sections, meetings, newDays: 0, tba: true, stats: null });
+          continue;
+        }
+        if (clashes(occupied, meetings)) continue;
+
+        const stats = analyse(occupied.concat(meetings));
+        if (opts.minFreeDays && stats.freeWeekdays < opts.minFreeDays) continue;
+        if (opts.maxPerDay != null && stats.perDay.some((d) => d.count > opts.maxPerDay)) continue;
+        if (opts.maxGap != null && stats.maxGap > opts.maxGap) continue;
+
+        const newDays = new Set(meetings.map((m) => m.day).filter((d) => !usedDays.has(d))).size;
+        fits.push({ sections, meetings, newDays, tba: false, stats });
+      }
+
+      if (!fits.length) continue;
+
+      // Prefer options that don't drag you onto campus on a new day.
+      fits.sort((a, b) =>
+        Number(a.tba) - Number(b.tba) ||
+        a.newDays - b.newDays ||
+        (a.stats ? a.stats.totalGap : 0) - (b.stats ? b.stats.totalGap : 0)
+      );
+      out.push({ course, fits, best: fits[0] });
+    }
+
+    out.sort((a, b) =>
+      Number(a.best.tba) - Number(b.best.tba) ||
+      a.best.newDays - b.best.newDays ||
+      a.course.code.localeCompare(b.course.code)
+    );
+
+    return { matches: out.slice(0, limit), total: out.length };
+  }
+
+  global.HK.Generator = { generate, buildBundles, analyse, findAdditions, MAX_RESULTS };
 })(window);
