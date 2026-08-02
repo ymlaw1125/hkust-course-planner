@@ -21,6 +21,22 @@ can silently fail to load:
 node scripts/serve.mjs
 ```
 
+## Resizable layout
+
+The three columns, and the three sections of the left column (Course data /
+Selected / Saved groups), are separated by draggable splitters. **Drag** to
+resize, **double-click** to reset that one, or focus a splitter and use the
+**arrow keys** (hold Shift for bigger steps). Sizes persist in `localStorage`.
+
+Every pane scrolls independently, so a long selection can't squash the search
+results — which it used to, because `overflow-y: auto` makes a flex item's
+`min-height` resolve to `0` and the results box got crushed to a sliver.
+Splitters clamp so no pane can be dragged below a usable size, and shrinking the
+window re-clamps rather than stranding a track off-screen.
+
+Below 1180px the panels stack and the splitters disappear, since there is
+nothing left to split.
+
 ## Finding courses
 
 The course search matches on code or title, and **ignores spacing in codes** —

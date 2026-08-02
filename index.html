@@ -27,38 +27,56 @@
 
   <!-- ================= LEFT: catalog & selection ================= -->
   <aside class="panel panel-left">
-    <div class="panel-head">
-      <h2>1 · Course data</h2>
-      <button id="btn-import" class="btn small primary">Import / Paste</button>
+    <div class="vpane">
+      <div class="panel-head">
+        <h2>1 · Course data</h2>
+        <button id="btn-import" class="btn small primary">Import / Paste</button>
+      </div>
+
+      <div class="catalog-status" id="catalog-status"></div>
+
+      <div class="field">
+        <input id="search" type="search" placeholder="Search course code or title… e.g. COMP 2011">
+      </div>
+
+      <div id="search-results" class="search-results"></div>
     </div>
 
-    <div class="catalog-status" id="catalog-status"></div>
+    <div class="splitter row" data-axis="y" data-var="--row-1"
+         role="separator" aria-orientation="horizontal" tabindex="0"
+         title="Drag to resize · double-click to reset"></div>
 
-    <div class="field">
-      <input id="search" type="search" placeholder="Search course code or title… e.g. COMP 2011">
-    </div>
-
-    <div id="search-results" class="search-results"></div>
-
-    <div class="panel-head sticky-sub">
-      <h2>2 · Selected <span id="sel-count" class="pill">0</span></h2>
-      <button id="btn-clear-sel" class="btn small ghost">Clear</button>
-    </div>
-    <div id="selected-list" class="selected-list">
-      <p class="empty">No courses selected yet. Search above and click a course to add it.</p>
+    <div class="vpane">
+      <div class="panel-head">
+        <h2>2 · Selected <span id="sel-count" class="pill">0</span></h2>
+        <button id="btn-clear-sel" class="btn small ghost">Clear</button>
+      </div>
+      <div id="selected-list" class="selected-list">
+        <p class="empty">No courses selected yet. Search above and click a course to add it.</p>
+      </div>
     </div>
 
-    <div class="panel-head sticky-sub">
-      <h2>Saved groups</h2>
-      <span class="hint-inline">reuse a set of courses</span>
+    <div class="splitter row" data-axis="y" data-var="--row-2"
+         role="separator" aria-orientation="horizontal" tabindex="0"
+         title="Drag to resize · double-click to reset"></div>
+
+    <div class="vpane">
+      <div class="panel-head">
+        <h2>Saved groups</h2>
+        <span class="hint-inline">reuse a set of courses</span>
+      </div>
+      <div class="group-save">
+        <input id="group-name" type="text" maxlength="40" placeholder="Name this set… e.g. Year 2 Fall">
+        <button id="btn-save-group" class="btn small primary">Save</button>
+      </div>
+      <div id="group-msg" class="group-msg"></div>
+      <div id="group-list" class="group-list"></div>
     </div>
-    <div class="group-save">
-      <input id="group-name" type="text" maxlength="40" placeholder="Name this set… e.g. Year 2 Fall">
-      <button id="btn-save-group" class="btn small primary">Save</button>
-    </div>
-    <div id="group-msg" class="group-msg"></div>
-    <div id="group-list" class="group-list"></div>
   </aside>
+
+  <div class="splitter col" data-axis="x" data-var="--col-1"
+       role="separator" aria-orientation="vertical" tabindex="0"
+       title="Drag to resize · double-click to reset"></div>
 
   <!-- ================= MIDDLE: constraints ================= -->
   <section class="panel panel-mid">
@@ -150,6 +168,10 @@
     <button id="btn-generate" class="btn primary big">Generate timetables</button>
     <div id="gen-status" class="gen-status"></div>
   </section>
+
+  <div class="splitter col" data-axis="x" data-var="--col-2"
+       role="separator" aria-orientation="vertical" tabindex="0"
+       title="Drag to resize · double-click to reset"></div>
 
   <!-- ================= RIGHT: results ================= -->
   <section class="panel panel-right">

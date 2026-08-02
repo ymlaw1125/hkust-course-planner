@@ -40,6 +40,7 @@
     buildTimeSelects();
     buildDayChips();
     wireEvents();
+    initSplitters();
     renderGroups();
     restore();
   }
@@ -463,6 +464,124 @@
     Render.renderSectionList($('#result-sections'), tt, state.courseOrder);
   }
 
+  /* --------------------------------------------------------- resizable panes */
+
+  const LAYOUT_DEFAULT = { '--col-1': 340, '--col-2': 260, '--row-1': 300, '--row-2': 260 };
+  const LAYOUT_MIN = { '--col-1': 230, '--col-2': 200, '--row-1': 100, '--row-2': 100 };
+  const SPLITTER_PX = 14;   // column gutter track
+  const ROW_SPLIT_PX = 12;  // row gutter track
+  const LAST_COL_MIN = 300; // the results panel must stay usable
+  const LAST_ROW_MIN = 100;
+
+  const layoutHost = (v) => (v.startsWith('--col') ? $('.layout') : $('.panel-left'));
+
+  function trackPx(v) {
+    const raw = getComputedStyle(layoutHost(v)).getPropertyValue(v);
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : LAYOUT_DEFAULT[v];
+  }
+
+  /** Keep a track within its own minimum and whatever the last track needs. */
+  function clampTrack(v, px) {
+    const isCol = v.startsWith('--col');
+    const host = layoutHost(v);
+    const other = isCol
+      ? trackPx(v === '--col-1' ? '--col-2' : '--col-1')
+      : trackPx(v === '--row-1' ? '--row-2' : '--row-1');
+
+    let avail;
+    if (isCol) {
+      const cs = getComputedStyle(host);
+      avail = host.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - SPLITTER_PX * 2;
+    } else {
+      avail = host.clientHeight - ROW_SPLIT_PX * 2;
+    }
+
+    const min = LAYOUT_MIN[v];
+    const max = Math.max(min, avail - other - (isCol ? LAST_COL_MIN : LAST_ROW_MIN));
+    return Math.round(Math.min(Math.max(px, min), max));
+  }
+
+  function setTrack(v, px) {
+    layoutHost(v).style.setProperty(v, `${clampTrack(v, px)}px`);
+  }
+
+  function readLayout() {
+    const out = {};
+    for (const v of Object.keys(LAYOUT_DEFAULT)) out[v] = Math.round(trackPx(v));
+    return out;
+  }
+
+  function applyLayout(saved) {
+    if (!saved) return;
+    for (const [v, px] of Object.entries(saved)) {
+      if (LAYOUT_DEFAULT[v] == null || !Number.isFinite(px)) continue;
+      layoutHost(v).style.setProperty(v, `${px}px`);
+    }
+    // A window narrower than last session could leave a track oversized.
+    for (const v of Object.keys(LAYOUT_DEFAULT)) setTrack(v, trackPx(v));
+  }
+
+  function initSplitters() {
+    for (const el of document.querySelectorAll('.splitter')) {
+      const v = el.dataset.var;
+      const axis = el.dataset.axis;
+
+      el.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        el.classList.add('dragging');
+        document.body.classList.add('resizing', axis);
+
+        const startPos = axis === 'x' ? e.clientX : e.clientY;
+        const startPx = trackPx(v);
+
+        const move = (ev) => {
+          const now = axis === 'x' ? ev.clientX : ev.clientY;
+          setTrack(v, startPx + (now - startPos));
+        };
+        const done = () => {
+          el.removeEventListener('pointermove', move);
+          el.removeEventListener('pointerup', done);
+          el.removeEventListener('pointercancel', done);
+          el.classList.remove('dragging');
+          document.body.classList.remove('resizing', 'x', 'y');
+          persist();
+        };
+        el.addEventListener('pointermove', move);
+        el.addEventListener('pointerup', done);
+        el.addEventListener('pointercancel', done);
+      });
+
+      el.addEventListener('dblclick', () => {
+        layoutHost(v).style.setProperty(v, `${LAYOUT_DEFAULT[v]}px`);
+        setTrack(v, LAYOUT_DEFAULT[v]);
+        persist();
+      });
+
+      el.addEventListener('keydown', (e) => {
+        const step = e.shiftKey ? 40 : 12;
+        const map = axis === 'x'
+          ? { ArrowLeft: -step, ArrowRight: step }
+          : { ArrowUp: -step, ArrowDown: step };
+        const d = map[e.key];
+        if (d == null) return;
+        e.preventDefault();
+        setTrack(v, trackPx(v) + d);
+        persist();
+      });
+    }
+
+    // Shrinking the window must not strand a track wider than the viewport.
+    let raf = 0;
+    window.addEventListener('resize', () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        for (const v of Object.keys(LAYOUT_DEFAULT)) setTrack(v, trackPx(v));
+      });
+    });
+  }
+
   /* --------------------------------------------------------- fill a gap */
 
   function currentYear() {
@@ -782,6 +901,7 @@
         },
         theme: document.documentElement.dataset.theme,
         year: $('#fill-year').value,
+        layout: readLayout(),
       }));
     } catch (_) { /* storage disabled — not fatal */ }
   }
@@ -793,6 +913,7 @@
 
     if (saved.theme) document.documentElement.dataset.theme = saved.theme;
     if (saved.year) $('#fill-year').value = saved.year;
+    applyLayout(saved.layout);
 
     const c = saved.constraints || {};
     if (c.earliest) $('#c-earliest').value = c.earliest;

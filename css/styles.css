@@ -72,11 +72,14 @@ code, kbd {
 
 /* ---------------------------------------------------------------- layout */
 .layout {
+  --col-1: 340px;
+  --col-2: 260px;
   display: grid;
-  grid-template-columns: 340px 260px minmax(0, 1fr);
-  gap: 14px;
+  /* The splitters occupy their own tracks and supply the visual gutter. */
+  grid-template-columns: var(--col-1) 14px var(--col-2) 14px minmax(0, 1fr);
+  gap: 0;
   padding: 14px;
-  align-items: start;
+  align-items: stretch;
   height: calc(100vh - 58px);
 }
 
@@ -90,6 +93,72 @@ code, kbd {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* ---------------------------------------------------------------- splitters */
+.splitter {
+  position: relative;
+  align-self: stretch;
+  background: none;
+  border: 0;
+  padding: 0;
+  touch-action: none;
+}
+.splitter::after {
+  content: '';
+  position: absolute;
+  background: var(--line);
+  border-radius: 2px;
+  transition: background .12s;
+}
+.splitter.col { cursor: col-resize; }
+.splitter.col::after { top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); }
+.splitter.row { cursor: row-resize; height: 12px; }
+.splitter.row::after { left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); }
+
+.splitter:hover::after,
+.splitter:focus-visible::after,
+.splitter.dragging::after { background: var(--accent); }
+.splitter:focus-visible { outline: none; }
+
+/* Pointer capture keeps events on the splitter; we only need to stop the drag
+   from selecting text and to hold the resize cursor across the whole page. */
+body.resizing { user-select: none; }
+body.resizing.x, body.resizing.x * { cursor: col-resize; }
+body.resizing.y, body.resizing.y * { cursor: row-resize; }
+
+/* --------------------------------------------------- left panel sub-panes */
+.panel-left {
+  --row-1: 300px;
+  --row-2: 260px;
+  padding: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: var(--row-1) 12px var(--row-2) 12px minmax(0, 1fr);
+}
+
+/* Each pane scrolls on its own, so a long selection can no longer squash the
+   search results down to a sliver. */
+/* No padding-top: it would sit inside the scrollport and stop the sticky
+   header below from reaching the top, letting rows bleed above it. The header
+   supplies that space itself. */
+.vpane {
+  overflow-y: auto;
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.vpane + .splitter.row { margin: 0 12px; }
+
+/* Pin each pane's heading so it stays put while its own list scrolls. */
+.vpane > .panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-2);
+  margin: 0 -12px 8px;
+  padding: 12px 12px 8px;
 }
 
 .panel-head {
@@ -144,7 +213,9 @@ code, kbd {
 }
 .field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-.search-results { max-height: 230px; overflow-y: auto; margin: 8px 0; }
+/* No cap and no scroller of its own — the pane around it scrolls, so results
+   can't be squeezed to a sliver by whatever else is in the panel. */
+.search-results { flex: none; margin: 8px 0; }
 .sr-item {
   display: grid; grid-template-columns: 84px 1fr auto; gap: 8px; align-items: baseline;
   width: 100%; text-align: left; background: none; border: 0;
@@ -414,10 +485,18 @@ textarea {
 .help strong { color: var(--fg); }
 
 /* ---------------------------------------------------------------- responsive */
+/* Below the three-column breakpoint the panels stack, so the splitters have
+   nothing to split — hide them and let every pane size to its content. */
 @media (max-width: 1180px) {
-  .layout { grid-template-columns: 1fr 1fr; height: auto; }
+  .layout { grid-template-columns: 1fr 1fr; gap: 14px; height: auto; }
   .panel { height: auto; max-height: 620px; }
   .panel-right { grid-column: 1 / -1; }
+  .splitter { display: none; }
+  .panel-left {
+    padding: 12px; overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .vpane { overflow: visible; padding: 0; }
 }
 @media (max-width: 720px) {
   .layout { grid-template-columns: 1fr; padding: 10px; }
