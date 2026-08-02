@@ -97,16 +97,22 @@
       const query = q.trim().toUpperCase();
       if (!query) return [];
       const terms = query.split(/\s+/);
+      const bareQuery = query.replace(/\s+/g, '');
       const out = [];
       for (const e of this.index.courses) {
-        const hay = `${e.c} ${e.t}`.toUpperCase();
+        const code = e.c.toUpperCase();
+        const hay = `${code} ${(e.t || '').toUpperCase()}`;
+        // Nobody types the space in "COMP 2011", so match the squashed code too.
+        const bareCode = code.replace(/\s+/g, '');
         let ok = true;
         for (const t of terms) {
-          if (!hay.includes(t)) { ok = false; break; }
+          if (hay.includes(t) || bareCode.includes(t)) continue;
+          ok = false;
+          break;
         }
         if (!ok) continue;
-        // Exact-prefix matches on the code rank first.
-        const rank = e.c.toUpperCase().startsWith(query) ? 0 : 1;
+        // Exact-prefix matches on the code rank first, spacing aside.
+        const rank = bareCode.startsWith(bareQuery) ? 0 : 1;
         out.push({ e, rank });
         if (out.length > 400) break;
       }

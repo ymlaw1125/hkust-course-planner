@@ -21,6 +21,14 @@ can silently fail to load:
 node scripts/serve.mjs
 ```
 
+## Finding courses
+
+The course search matches on code or title, and **ignores spacing in codes** —
+`comp2011`, `COMP 2011` and `comp 2011` all find the same course. Terms are
+ANDed, so `comp2011 programming` narrows by both, and exact code matches are
+ranked above title matches. The search box in [Fill a gap](#fill-a-gap) behaves
+the same way.
+
 ## Fill a gap
 
 Once you have a timetable you like, **+ Fill a gap** finds courses that drop
