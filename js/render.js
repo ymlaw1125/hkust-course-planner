@@ -2,7 +2,41 @@
 (function (global) {
   'use strict';
 
-  const { DAYS, KIND_LABEL, hhmm } = global.HK;
+  const { DAYS, KIND_LABEL, hhmm, Ratings } = global.HK;
+
+  /** "LI, Xin" / "SHEN, Shaojie + 1" — compact enough for a chip. */
+  function instructorLabel(sec, { max = 1 } = {}) {
+    const people = Ratings.names(sec.instructors);
+    if (!people.length) return 'TBA';
+    if (people.length <= max) return people.join(', ');
+    return `${people.slice(0, max).join(', ')} +${people.length - max}`;
+  }
+
+  /**
+   * Instructor plus grade for one section. When nobody is assigned the badge
+   * already reads TBA, so the name is left off rather than printing "TBA TBA".
+   */
+  function instructorCell(sec, opts) {
+    const badge = gradeBadge(sec);
+    if (!Ratings.names(sec.instructors).length) return badge;
+    return escapeHtml(instructorLabel(sec, opts)) + badge;
+  }
+
+  /**
+   * The section's grade, or TBA when nobody is assigned. A named instructor
+   * with no rating gets nothing — that's missing data, not a fact about them.
+   */
+  function gradeBadge(sec) {
+    const g = Ratings.gradeOf(sec);
+    if (g) {
+      const cls = g.replace('+', 'p').replace('-', 'm');
+      return `<span class="grade g${escapeHtml(cls)}">${escapeHtml(g)}</span>`;
+    }
+    if (!Ratings.names(sec.instructors).length) {
+      return '<span class="grade tba" title="Instructor not announced yet">TBA</span>';
+    }
+    return '';
+  }
 
   const VISIBLE_DAYS = 5;      // Mon–Fri; extended automatically if a class falls on Sat/Sun
   const DEFAULT_START = 9 * 60;
@@ -158,6 +192,7 @@
               <span class="rs-time">${escapeHtml(times)}</span>
               <span class="rs-room">${escapeHtml(s.rooms[0] || '')}</span>
               ${crn}
+              <span class="rs-who" title="${escapeHtml(s.instructors || 'To be announced')}">${instructorCell(s, { max: 2 })}</span>
             </div>`;
         })
         .join('');
@@ -376,8 +411,9 @@
           const style = shared
             ? `top:${top}px;height:${h}px;left:${(m._col / m._cols) * 100}%;width:${100 / m._cols}%`
             : `top:${top}px;height:${h}px;left:${(m._col / m._cols) * 100}%;width:${100 / m._cols}%;background:${colorFor(m.course.code, order)}`;
+          const g = Ratings.gradeOf(m.section);
           return `<div class="cmp-block${shared ? ' shared' : ' diff'}" style="${style}"
-                       title="${escapeHtml(`${m.course.code} ${m.section.section}\n${DAYS[m.day]} ${hhmm(m.start)}–${hhmm(m.end)}\n${m.section.rooms[0] || ''}`)}">
+                       title="${escapeHtml(`${m.course.code} ${m.section.section}\n${DAYS[m.day]} ${hhmm(m.start)}–${hhmm(m.end)}\n${m.section.rooms[0] || ''}\n${instructorLabel(m.section, { max: 3 })}${g ? ` (${g})` : ''}`)}">
               <span>${escapeHtml(m.course.code.replace(/\s+/g, ''))}</span>
               <em>${escapeHtml(m.section.section)}</em>
             </div>`;
@@ -392,10 +428,20 @@
       hours.push(`<span style="top:${(t - startMin) * CMP_PX_PER_MIN}px">${hhmm(t)}</span>`);
     }
 
+    // Who teaches each option's choice is usually the deciding factor, so it
+    // belongs in the table rather than only in a tooltip.
     const diffList = differing.length
       ? differing.map((d) => `<tr>
             <th>${escapeHtml(d.course.code)} <small>${escapeHtml((KIND_LABEL[d.kind] || d.kind).toLowerCase())}</small></th>
-            ${d.names.map((n, i) => `<td${d.names.filter((x) => x === n).length === 1 ? ' class="uniq"' : ''}>${escapeHtml(n)}</td>`).join('')}
+            ${d.names.map((n, i) => {
+              const sec = d.picks[i];
+              const unique = d.names.filter((x) => x === n).length === 1;
+              if (!sec) return '<td class="none">—</td>';
+              return `<td${unique ? ' class="uniq"' : ''}>
+                  <span class="dv-sec">${escapeHtml(n)}</span>
+                  <span class="dv-who">${instructorCell(sec)}</span>
+                </td>`;
+            }).join('')}
           </tr>`).join('')
       : `<tr><td colspan="${options.length + 1}" class="muted">These options are identical.</td></tr>`;
 
@@ -642,6 +688,7 @@
 
   global.HK.Render = {
     renderGrid, renderSectionList, renderCompare, colorFor,
+    gradeBadge, instructorLabel, instructorCell,
     toICS, toCSV, toPNG, downloadPNG,
     download, downloadBlob, escapeHtml, TERM_START,
   };

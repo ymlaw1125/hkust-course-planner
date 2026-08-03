@@ -362,7 +362,14 @@ body.resizing.y, body.resizing.y * { cursor: row-resize; }
 .cmp-diff thead th { color: var(--fg-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
 .cmp-diff tbody th { font-weight: 600; white-space: nowrap; }
 .cmp-diff tbody th small { color: var(--fg-3); font-weight: 400; }
-.cmp-diff td.uniq { color: var(--accent); font-weight: 600; }
+.cmp-diff td { vertical-align: top; }
+.cmp-diff td.uniq .dv-sec { color: var(--accent); font-weight: 600; }
+.cmp-diff td.none { color: var(--fg-3); }
+.dv-sec { display: block; font-weight: 600; }
+.dv-who {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  font-size: 10.5px; color: var(--fg-3); margin-top: 1px;
+}
 
 @media (max-width: 780px) {
   .cmp { grid-template-columns: 46px 1fr; }
@@ -451,6 +458,10 @@ body.resizing.y, body.resizing.y * { cursor: row-resize; }
 .sec-chip.full .sc-name::after { content: ' ⚠'; color: var(--warn); }
 .sc-name { font-weight: 600; }
 .sc-time { color: var(--fg-2); font-size: 11px; }
+.sc-who {
+  color: var(--fg-3); font-size: 10.5px;
+  max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ---------------------------------------------------------------- saved groups */
 .hint-inline { font-size: 11px; color: var(--fg-3); }
@@ -571,6 +582,11 @@ body.resizing.y, body.resizing.y * { cursor: row-resize; }
 .rs-kind { color: var(--fg-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; min-width: 58px; }
 .rs-room { color: var(--fg-3); }
 .crn { color: var(--fg-3); font-size: 10.5px; }
+/* Pushed to the end of the row so it lines up down the card. */
+.rs-who {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+  color: var(--fg-2); white-space: nowrap;
+}
 
 /* ---------------------------------------------------------------- empty */
 .empty { color: var(--fg-3); font-size: 12.5px; padding: 8px 2px; margin: 0; }

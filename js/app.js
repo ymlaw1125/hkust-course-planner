@@ -201,22 +201,8 @@
     return !Ratings.names(sec.instructors).length;
   }
 
-  /**
-   * Badge for a section: its letter grade, or "TBA" when the instructor hasn't
-   * been announced. A known instructor who simply has no rating gets nothing —
-   * that is a gap in the ratings data, not a fact about the section.
-   */
-  function gradeBadge(sec) {
-    const g = Ratings.gradeOf(sec);
-    if (g) {
-      const cls = g.replace('+', 'p').replace('-', 'm');
-      return `<span class="grade g${esc(cls)}">${esc(g)}</span>`;
-    }
-    if (isUnassigned(sec)) {
-      return '<span class="grade tba" title="Instructor not announced yet">TBA</span>';
-    }
-    return '';
-  }
+  // Shared with the results and comparison views so they can't drift apart.
+  const gradeBadge = Render.gradeBadge;
 
   /** Courses whose ratings count: the opted-in ones, or all if none opted in. */
   function ratedScope() {
@@ -365,6 +351,7 @@
                     <input type="checkbox" data-code="${esc(code)}" data-sec="${esc(s.section)}" ${off ? '' : 'checked'}>
                     <span class="sc-name">${esc(s.section)}</span>
                     <span class="sc-time">${esc(timesOf(s))}</span>
+                    ${isUnassigned(s) ? '' : `<span class="sc-who">${esc(Render.instructorLabel(s))}</span>`}
                     ${gradeBadge(s)}
                   </label>`;
               }).join('')}</div>`;

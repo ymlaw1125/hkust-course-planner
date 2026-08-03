@@ -128,9 +128,14 @@ not care who teaches the rest. Lectures count double tutorials and labs, since
 tutorials are often run by TAs. Unrated instructors are skipped rather than
 scored zero: a new lecturer isn't a bad one.
 
-Grades appear on the section chips and in the lock picker, and each timetable
-shows its average. Three states are distinguished, because they mean different
-things:
+Who's teaching is shown wherever you're choosing between sections: the section
+chips in **Selected**, the lock picker, the section breakdown under the results
+grid, and each cell of the comparison's difference table — so `COMP 3711 lecture
+· L1 YI, Ke (C-) · L2 MA, Xiaojuan (C-)` reads as a decision, not two codes.
+Co-taught sections show the first name plus a `+n`, with the full list on hover.
+
+Grades appear alongside, and each timetable shows its average. Three states are
+distinguished, because they mean different things:
 
 | Section | Shows |
 |---|---|
