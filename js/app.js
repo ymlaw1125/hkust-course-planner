@@ -46,7 +46,12 @@
     wireEvents();
     initSplitters();
     renderGroups();
-    restore();
+
+    // A share link wins over the saved session — someone opening a link is
+    // asking to see that timetable, not the one they left behind.
+    applyShareLink().then((applied) => {
+      if (!applied) restore();
+    });
   }
 
   function buildTimeSelects() {
@@ -1128,6 +1133,184 @@
     reader.readAsText(file);
   }
 
+  /* --------------------------------------------------------- share links */
+
+  /*
+   * A whole setup packed into the URL fragment. The fragment never leaves the
+   * browser — it isn't sent to a server — so a link is shareable without this
+   * app having any backend at all.
+   *
+   * Keys are single letters and defaults are omitted, because the result has
+   * to survive being pasted into WhatsApp.
+   */
+  const SHARE_VERSION = 1;
+
+  function compactState() {
+    const c = {};
+    const put = (k, v) => { if (v !== '' && v != null) c[k] = v; };
+    put('e', $('#c-earliest').value);
+    put('l', $('#c-latest').value);
+    put('f', $('#c-minfree').value);
+    put('u', $('#c-lunch').value);
+    put('g', $('#c-maxgap').value);
+    put('d', $('#c-maxperday').value);
+    if (!$('#c-linked').checked) c.k = 0;        // on by default
+    if ($('#c-skipfull').checked) c.x = 1;       // off by default
+    if ($('#c-sort').value !== 'days') c.o = $('#c-sort').value;
+    const free = [...document.querySelectorAll('#c-freedays .chip.on')].map((b) => +b.dataset.day);
+    if (free.length) c.w = free;
+
+    const out = { v: SHARE_VERSION, s: state.selected.slice() };
+    if (Object.keys(c).length) out.c = c;
+
+    const dis = {};
+    const pin = {};
+    const star = [];
+    for (const code of state.selected) {
+      if (state.disabled[code] && state.disabled[code].length) dis[code] = state.disabled[code];
+      if (state.pinned[code] && Object.keys(state.pinned[code]).length) pin[code] = state.pinned[code];
+      if (state.preferRated[code]) star.push(code);
+    }
+    if (Object.keys(dis).length) out.d = dis;
+    if (Object.keys(pin).length) out.p = pin;
+    if (star.length) out.r = star;
+    return out;
+  }
+
+  const b64urlEncode = (bytes) => {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+
+  const b64urlDecode = (str) => {
+    const s = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+    const out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+    return out;
+  };
+
+  async function deflateText(text) {
+    if (typeof CompressionStream === 'undefined') return null;
+    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function inflateBytes(bytes) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Response(stream).text();
+  }
+
+  /** "#p=z…" is deflated, "#p=j…" is plain — older browsers still get a link. */
+  async function buildShareUrl() {
+    const json = JSON.stringify(compactState());
+    let payload;
+    try {
+      const packed = await deflateText(json);
+      payload = packed ? `z${b64urlEncode(packed)}` : null;
+    } catch (_) {
+      payload = null;
+    }
+    if (!payload) payload = `j${b64urlEncode(new TextEncoder().encode(json))}`;
+
+    const base = location.origin === 'null'
+      ? location.href.split('#')[0]                     // opened from file://
+      : location.origin + location.pathname;
+    return `${base}#p=${payload}`;
+  }
+
+  async function decodeShare(payload) {
+    const mode = payload[0];
+    const bytes = b64urlDecode(payload.slice(1));
+    const json = mode === 'z'
+      ? await inflateBytes(bytes)
+      : new TextDecoder().decode(bytes);
+    return JSON.parse(json);
+  }
+
+  /** Turn a decoded share payload back into the verbose planner shape. */
+  function expandShare(o) {
+    const c = o.c || {};
+    return {
+      app: PLANNER_FILE.app,
+      version: 1,
+      selected: o.s || [],
+      disabled: o.d || {},
+      pinned: o.p || {},
+      preferRated: Object.fromEntries((o.r || []).map((code) => [code, true])),
+      constraints: {
+        earliest: c.e || '', latest: c.l || '', minfree: c.f || '',
+        lunch: c.u || '', maxgap: c.g || '', maxperday: c.d || '',
+        linked: c.k === undefined ? true : !!c.k,
+        skipfull: !!c.x,
+        sort: c.o || 'days',
+        freedays: c.w || [],
+      },
+    };
+  }
+
+  /**
+   * Applied once at start-up, then removed from the address bar: after that the
+   * session is the visitor's own, and a refresh must not wipe their edits by
+   * re-applying a stale link.
+   */
+  async function applyShareLink() {
+    const m = /[#&]p=([A-Za-z0-9\-_]+)/.exec(location.hash || '');
+    if (!m) return false;
+    try {
+      const data = expandShare(await decodeShare(m[1]));
+
+      // Applying the link overwrites the saved session, so keep a copy and
+      // offer it back. A blocking confirm() before the page has even rendered
+      // would be a worse way to ask.
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (_) { /* ignore */ }
+      previousSession = (saved && saved.selected && saved.selected.length) ? saved : null;
+
+      history.replaceState(null, '', location.pathname + location.search);
+      await importPlanner(data, { source: 'link' });
+
+      if (previousSession) {
+        $('#gen-status').insertAdjacentHTML('beforeend',
+          `<div class="muted">This replaced your saved setup of ${previousSession.selected.length} course(s). ` +
+          `<button id="btn-undo-share" class="btn tiny ghost">Restore it</button></div>`);
+      }
+      return true;
+    } catch (err) {
+      history.replaceState(null, '', location.pathname + location.search);
+      $('#gen-status').innerHTML =
+        `<div><span class="warn">That share link couldn't be read — it may be truncated.</span></div>`;
+      return false;
+    }
+  }
+
+  async function openShare() {
+    if (!state.selected.length) return;
+    const url = await buildShareUrl();
+    const box = $('#share-url');
+    box.value = url;
+    $('#share-len').textContent = `${url.length} characters`;
+    $('#share-msg').innerHTML = '';
+    $('#modal-share').classList.remove('hidden');
+    box.focus();
+    box.select();
+  }
+
+  async function copyShare() {
+    const box = $('#share-url');
+    box.select();
+    try {
+      // Needs a secure context, which file:// isn't — hence the visible field.
+      await navigator.clipboard.writeText(box.value);
+      $('#share-msg').innerHTML = '<span class="ok">Copied to clipboard.</span>';
+    } catch (_) {
+      $('#share-msg').innerHTML =
+        '<span class="warn">Couldn\'t reach the clipboard — the link is selected above, press Ctrl+C.</span>';
+    }
+  }
+
   /* --------------------------------------------------- planner file format */
 
   const PLANNER_FILE = { app: 'hkust-timetable-planner', version: 1 };
@@ -1164,8 +1347,9 @@
     Render.download(name, JSON.stringify(buildPlannerFile(), null, 2), 'application/json');
   }
 
-  async function importPlanner(data) {
-    if (state.selected.length && !confirm('Replace your current setup with this planner file?')) return;
+  async function importPlanner(data, { source = 'file' } = {}) {
+    const what = source === 'link' ? 'this shared link' : 'this planner file';
+    if (state.selected.length && !confirm(`Replace your current setup with ${what}?`)) return false;
 
     const c = data.constraints || {};
     const set = (sel, v) => { if (v !== undefined && v !== null) $(sel).value = v; };
@@ -1214,12 +1398,14 @@
     const termNote = data.term && Catalog.index && data.term !== Catalog.index.term
       ? ` <span class="warn">File is for term ${esc(data.term)}, your catalog is ${esc(Catalog.index.term)}.</span>`
       : '';
+    const from = source === 'link' ? 'a shared link' : 'the planner file';
     $('#gen-status').innerHTML =
-      `<div><span class="ok">Loaded ${found.length} course${found.length === 1 ? '' : 's'} from the planner file.</span>${termNote}</div>` +
+      `<div><span class="ok">Loaded ${found.length} course${found.length === 1 ? '' : 's'} from ${from}.</span>${termNote}</div>` +
       (missing.length
         ? `<div><span class="warn">Not offered this term: ${esc(missing.join(', '))}.</span></div>`
         : '') +
       '<div class="muted">Hit Generate.</div>';
+    return true;
   }
 
   function exportJson() {
@@ -1239,7 +1425,7 @@
   function updateExportButtons() {
     const n = state.results.length;
     for (const sel of ['#btn-ics', '#btn-png', '#btn-csv']) $(sel).disabled = !n;
-    $('#btn-planner').disabled = !state.selected.length;
+    for (const sel of ['#btn-planner', '#btn-share']) $(sel).disabled = !state.selected.length;
     const menu = $('#export-menu');
     const dead = !n && !state.selected.length;
     menu.classList.toggle('disabled', dead);
@@ -1305,11 +1491,31 @@
     } catch (_) { /* storage disabled — not fatal */ }
   }
 
+  /** The setup a share link displaced, kept so it can be handed back. */
+  let previousSession = null;
+
   async function restore() {
     let saved;
     try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (_) { return; }
     if (!saved) return;
+    await applySaved(saved);
+  }
 
+  async function undoShare() {
+    if (!previousSession) return;
+    const saved = previousSession;
+    previousSession = null;
+    state.selected = [];
+    state.results = [];
+    state.cursor = 0;
+    await applySaved(saved);
+    showResult();
+    persist();
+    $('#gen-status').innerHTML =
+      `<div><span class="ok">Restored your previous setup — ${state.selected.length} course(s).</span></div>`;
+  }
+
+  async function applySaved(saved) {
     if (saved.theme) document.documentElement.dataset.theme = saved.theme;
     if (saved.year) $('#fill-year').value = saved.year;
     applyLayout(saved.layout);
@@ -1332,6 +1538,7 @@
     state.disabled = saved.disabled || {};
     state.pinned = saved.pinned || {};
     state.preferRated = saved.preferRated || {};
+    state.selected = [];
     for (const code of saved.selected || []) {
       try {
         const course = await Catalog.getCourse(code);
@@ -1427,6 +1634,11 @@
     $('#btn-png').addEventListener('click', () => { closeExportMenu(); exportPng(); });
     $('#btn-csv').addEventListener('click', () => { closeExportMenu(); exportCsv(); });
     $('#btn-planner').addEventListener('click', () => { closeExportMenu(); exportPlanner(); });
+    $('#btn-share').addEventListener('click', () => { closeExportMenu(); openShare(); });
+    $('#btn-copy-share').addEventListener('click', copyShare);
+    $('#gen-status').addEventListener('click', (e) => {
+      if (e.target.id === 'btn-undo-share') undoShare();
+    });
     document.addEventListener('click', (e) => {
       const menu = $('#export-menu');
       if (menu.open && !menu.contains(e.target)) menu.open = false;

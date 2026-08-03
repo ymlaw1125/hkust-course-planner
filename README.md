@@ -31,10 +31,35 @@ node scripts/serve.mjs
 | **Spreadsheet** `.csv` | A half-hour grid you can read at a glance, then a table of every section with day, time, room and instructor. UTF-8 with a BOM so Excel opens it correctly on a double-click. |
 | **Calendar** `.ics` | Weekly repeating events for Google / Outlook / Apple Calendar. |
 | **Planner file** `.json` | Your whole setup — courses, un-ticked sections, locked sections, starred courses and every constraint. |
+| **Share link** | The same setup packed into a URL, no file and no server. |
 
 It's `.csv` rather than a real `.xlsx`: writing a genuine Excel workbook means
 hand-rolling a ZIP container, and a CSV that reliably opens beats a binary that
 might not. Excel reads it natively.
+
+### Share links
+
+**Export → Share link** packs the whole setup into a URL. A four-course setup
+with a locked section, a starred course and four constraints comes to about
+**190 characters**, so it survives being pasted anywhere.
+
+The state lives in the URL *fragment* (after the `#`), which browsers never send
+to a server — so sharing works with no backend, and nothing about your timetable
+is uploaded. It's JSON with single-letter keys, deflated via `CompressionStream`
+and base64url-encoded; browsers without `CompressionStream` fall back to plain
+base64 (`#p=j…` instead of `#p=z…`), which still works, just longer.
+
+Opening a link applies it and then **strips the fragment from the address bar**,
+so the session becomes the visitor's own — a later refresh won't wipe their
+edits by re-applying a stale link. If they already had a saved setup, the link
+replaces it but offers a one-click **Restore it** in the status area; that's
+deliberately a button rather than a `confirm()` dialog, which would block the
+page before it had even rendered. A truncated link reports itself and falls back
+to the saved session instead of failing silently.
+
+Copy uses the clipboard API where it's allowed and otherwise leaves the link
+selected for <kbd>Ctrl</kbd>+<kbd>C</kbd> — `file://` pages aren't a secure
+context, so the clipboard is unavailable there.
 
 ### Planner files
 

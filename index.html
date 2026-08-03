@@ -204,6 +204,9 @@
             <button id="btn-planner" class="menu-item">
               <strong>Planner file</strong><small>.json — reload it here later</small>
             </button>
+            <button id="btn-share" class="menu-item">
+              <strong>Share link</strong><small>a URL that reopens this setup</small>
+            </button>
           </div>
         </details>
       </div>
@@ -271,6 +274,28 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
         <button id="btn-manual" class="btn primary">Add sections</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ================= SHARE MODAL ================= -->
+<div id="modal-share" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Share this setup</h3>
+      <button class="btn ghost small" data-close>✕</button>
+    </div>
+    <p class="hint">
+      Everything is packed into the link itself — your courses, locked sections
+      and constraints. Nothing is uploaded; the part after <code>#</code> never
+      leaves the browser. Whoever opens it gets your setup and can change it
+      without affecting yours.
+    </p>
+    <input id="share-url" class="share-url" type="text" readonly spellcheck="false">
+    <div class="modal-actions">
+      <span id="share-len" class="muted"></span>
+      <button id="btn-copy-share" class="btn primary">Copy link</button>
+    </div>
+    <div id="share-msg" class="share-msg"></div>
   </div>
 </div>
 
