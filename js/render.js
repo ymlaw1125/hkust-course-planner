@@ -276,9 +276,23 @@
     return { differing, sameCount, common, total: slots.size };
   }
 
+  /** Distinct courses in a timetable, and their total credits. */
+  function courseSetOf(tt) {
+    const byCode = new Map();
+    for (const e of tt.entries) if (!byCode.has(e.course.code)) byCode.set(e.course.code, e.course);
+    return {
+      codes: [...byCode.keys()].sort(),
+      units: [...byCode.values()].reduce((n, c) => n + (Number(c.credits) || 0), 0),
+    };
+  }
+
   /** Stat rows, with the best value in each row flagged where "best" is unambiguous. */
   function compareStats(options) {
     const rows = [
+      // Only meaningful once options may hold different courses — but harmless
+      // when they don't, and it's the first thing you check when they do.
+      { label: 'Courses', get: (o) => courseSetOf(o.tt).codes.length, fmt: (v) => `${v}`, best: null },
+      { label: 'Total units', get: (o) => courseSetOf(o.tt).units, fmt: (v) => (v ? `${v}u` : '–'), best: null },
       { label: 'Days on campus', get: (o) => o.tt.stats.days, fmt: (v) => `${v}`, best: 'min' },
       { label: 'Days off', get: (o) => o.tt.stats.freeWeekdays, fmt: (v) => `${v}`, best: 'max' },
       { label: 'Idle between classes', get: (o) => o.tt.stats.totalGap, fmt: (v) => `${(v / 60).toFixed(1)}h`, best: 'min' },
@@ -321,13 +335,20 @@
     const { differing, sameCount, common, total } = compareSections(options);
     const stats = compareStats(options);
 
+    // Which courses appear in every option, so the odd ones out can be marked.
+    const sets = options.map((o) => courseSetOf(o.tt));
+    const inAll = sets[0].codes.filter((c) => sets.every((s) => s.codes.includes(c)));
+    const mixedCourses = sets.some((s) => s.codes.length !== inAll.length);
+
     const heads = options.map((o, i) => `
       <div class="cmp-head">
         <div class="cmp-name">
           <span class="cmp-tag">${String.fromCharCode(65 + i)}</span>
-          <span class="cmp-idx">#${o.index + 1}</span>
+          <span class="cmp-idx">${o.index == null ? '' : `#${o.index + 1}`}</span>
           <button class="btn tiny ghost" data-uncompare="${i}" title="Remove from comparison">✕</button>
         </div>
+        ${mixedCourses ? `<div class="cmp-courses">${sets[i].codes.map((c) =>
+          `<span class="${inAll.includes(c) ? '' : 'only'}">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
         <table class="cmp-stats">
           ${stats.map((r) => `<tr${r.bestIdx === i ? ' class="best"' : ''}>
               <th>${escapeHtml(r.label)}</th>

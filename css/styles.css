@@ -297,6 +297,16 @@ body.resizing.y, body.resizing.y * { cursor: row-resize; }
 }
 .cmp-idx { font-size: 11px; color: var(--fg-3); flex: 1; }
 
+/* Only rendered when the options hold different course sets. */
+.cmp-courses { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+.cmp-courses span {
+  font-size: 9.5px; padding: 0 5px; border-radius: 4px;
+  background: var(--bg-2); border: 1px solid var(--line-2); color: var(--fg-2);
+}
+.cmp-courses span.only {
+  border-color: var(--accent); color: var(--accent); font-weight: 600;
+}
+
 .cmp-stats { width: 100%; border-collapse: collapse; font-size: 11px; }
 .cmp-stats th {
   text-align: left; font-weight: 400; color: var(--fg-3);

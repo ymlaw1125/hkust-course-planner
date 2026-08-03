@@ -42,9 +42,23 @@ All the grids share **one time axis** (the union of every option's bounds), so a
 class at 10:30 sits at the same height in all three columns. Per-column bounds
 would make the comparison quietly misleading.
 
-The shortlist is dropped whenever you change which courses are selected, since
-timetables built from different course sets aren't comparable. Below 780px the
-columns stack instead.
+**The shortlist survives a change of courses**, so you can weigh up "these four
+subjects against those five" — shortlist one setup, swap a course, generate
+again, shortlist that, and compare. Shortlisted timetables carry their own
+course and section data, so they stay intact no matter what you select next.
+
+When the options hold different courses, two extra things appear: **Courses**
+and **Total units** rows, and a chip list per option with the courses *not* in
+every option outlined in the accent colour. Both are hidden when all the options
+hold the same courses, so the common case stays uncluttered. Course slots
+missing from an option show `—` in the difference table.
+
+Colours span the whole shortlist rather than just the current selection, so a
+course you've since removed keeps its own colour instead of colliding with
+another. The `#N` result number is shown only while the selection it referred to
+is still the one loaded.
+
+Below 780px the columns stack instead.
 
 Once three are shortlisted the button reads **Max 3** and is disabled, with the
 reason in its tooltip — a message elsewhere on the page is no use when your

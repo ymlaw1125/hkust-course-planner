@@ -1163,23 +1163,23 @@
       flash(`You can compare ${COMPARE_MAX} at a time — remove one first.`);
       return;
     } else {
-      state.compare.push({ key: timetableKey(tt), tt, index: state.cursor });
+      state.compare.push({
+        key: timetableKey(tt),
+        tt,
+        index: state.cursor,
+        // The index only means something while the same courses are selected.
+        selKey: selectionKey(),
+      });
     }
     updateCompareUi();
   }
 
-  let compareSelectionKey = '';
+  const selectionKey = () => state.selected.slice().sort().join(',');
 
   function updateCompareUi() {
-    // Comparing timetables built from different course sets is meaningless, so
-    // drop the shortlist whenever the selection changes. Checked here rather
-    // than at each call site so it can't be missed.
-    const selKey = state.selected.slice().sort().join(',');
-    if (selKey !== compareSelectionKey) {
-      compareSelectionKey = selKey;
-      state.compare = [];
-    }
-
+    // The shortlist deliberately survives a change of courses: "these four vs
+    // those five" is a question worth asking. Entries carry their own course
+    // objects, so a shortlisted timetable stays intact regardless.
     const tt = state.results[state.cursor];
     const on = tt ? compareIndexOf(tt) >= 0 : false;
     const atCap = state.compare.length >= COMPARE_MAX;
@@ -1210,17 +1210,36 @@
     if (!$('#modal-compare').classList.contains('hidden')) drawCompare();
   }
 
+  /**
+   * Colours for every course across the shortlist, not just the selected ones.
+   * Currently-selected courses keep the colour they have on screen; anything
+   * only present in an older shortlisted timetable gets the next free slot,
+   * rather than falling back to index 0 and colliding.
+   */
+  function compareColourOrder() {
+    const order = new Map(state.courseOrder);
+    let next = order.size;
+    for (const c of state.compare) {
+      for (const e of c.tt.entries) {
+        if (!order.has(e.course.code)) order.set(e.course.code, next++);
+      }
+    }
+    return order;
+  }
+
   function drawCompare() {
+    const nowKey = selectionKey();
     const options = state.compare.map((c) => {
       const p = Ratings.ready ? timetableRating(c.tt, ratedScope()) : null;
       return {
         tt: c.tt,
-        index: c.index,
+        // Hide the result index once it no longer points at anything real.
+        index: c.selKey === nowKey ? c.index : null,
         ratingPercentile: p,
         ratingLetter: p == null ? null : Ratings.letter(p),
       };
     });
-    Render.renderCompare($('#compare-body'), options, state.courseOrder);
+    Render.renderCompare($('#compare-body'), options, compareColourOrder());
   }
 
   function openCompare() {
