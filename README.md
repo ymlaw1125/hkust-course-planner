@@ -46,6 +46,11 @@ The shortlist is dropped whenever you change which courses are selected, since
 timetables built from different course sets aren't comparable. Below 780px the
 columns stack instead.
 
+Once three are shortlisted the button reads **Max 3** and is disabled, with the
+reason in its tooltip — a message elsewhere on the page is no use when your
+attention is on the button you just pressed. A shortlisted timetable still shows
+**✓ Shortlisted** and stays clickable, so you can always swap one out.
+
 ## Exporting
 
 **Export ▾** in the results header offers four formats:

@@ -1182,11 +1182,26 @@
 
     const tt = state.results[state.cursor];
     const on = tt ? compareIndexOf(tt) >= 0 : false;
+    const atCap = state.compare.length >= COMPARE_MAX;
     const btn = $('#btn-shortlist');
-    btn.disabled = !tt;
-    btn.textContent = on ? '✓ Shortlisted' : '+ Compare';
-    btn.classList.toggle('primary', on);
-    btn.title = on ? 'Remove this timetable from the comparison' : 'Shortlist this timetable for comparison';
+
+    // Say the limit on the button itself. Reporting it in #gen-status put the
+    // message in the constraints column, nowhere near where you're looking.
+    let label = '+ Compare';
+    let title = 'Shortlist this timetable for comparison';
+    let disabled = !tt;
+    if (tt && on) {
+      label = '✓ Shortlisted';
+      title = 'Remove this timetable from the comparison';
+    } else if (tt && atCap) {
+      label = `Max ${COMPARE_MAX}`;
+      title = `Already comparing ${COMPARE_MAX} timetables — remove one to shortlist this.`;
+      disabled = true;
+    }
+    btn.textContent = label;
+    btn.title = title;
+    btn.disabled = disabled;
+    btn.classList.toggle('toggled', on);
 
     const open = $('#btn-compare');
     open.hidden = !state.compare.length;
