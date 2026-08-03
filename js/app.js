@@ -22,7 +22,12 @@
     courseOrder: new Map(),
     activeGroup: null,    // id of the group currently loaded, for highlighting
     fill: null,           // full result set of the last "fill a gap" search
+    compare: [],          // shortlisted timetables, max COMPARE_MAX
   };
+
+  // Three fits side by side and keeps the difference table readable; four
+  // does neither.
+  const COMPARE_MAX = 3;
 
   /* --------------------------------------------------------- boot */
 
@@ -406,6 +411,7 @@
 
     $('#btn-reset-sel').hidden = !state.selected.some(isCustomised);
     updateExportButtons();
+    updateCompareUi();
 
     const pane = box.closest('.vpane');
     if (pane) pane.scrollTop = scrollTop;
@@ -682,6 +688,7 @@
     $('#btn-prev').disabled = !n || state.cursor === 0;
     $('#btn-next').disabled = !n || state.cursor >= n - 1;
     updateExportButtons();
+    updateCompareUi();
     $('#btn-fill').disabled = !n;
     $('#result-idx').textContent = n ? `${state.cursor + 1} / ${n.toLocaleString()}` : '–';
 
@@ -1131,6 +1138,86 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  /* --------------------------------------------------------- comparison */
+
+  /** Identity of a timetable, so the same one can't be shortlisted twice. */
+  function timetableKey(tt) {
+    return tt.entries.map((e) => `${e.course.code}|${e.section.section}`).sort().join(',');
+  }
+
+  function compareIndexOf(tt) {
+    const key = timetableKey(tt);
+    return state.compare.findIndex((c) => c.key === key);
+  }
+
+  function toggleShortlist() {
+    const tt = state.results[state.cursor];
+    if (!tt) return;
+
+    const at = compareIndexOf(tt);
+    if (at >= 0) {
+      state.compare.splice(at, 1);
+    } else if (state.compare.length >= COMPARE_MAX) {
+      flash(`You can compare ${COMPARE_MAX} at a time — remove one first.`);
+      return;
+    } else {
+      state.compare.push({ key: timetableKey(tt), tt, index: state.cursor });
+    }
+    updateCompareUi();
+  }
+
+  let compareSelectionKey = '';
+
+  function updateCompareUi() {
+    // Comparing timetables built from different course sets is meaningless, so
+    // drop the shortlist whenever the selection changes. Checked here rather
+    // than at each call site so it can't be missed.
+    const selKey = state.selected.slice().sort().join(',');
+    if (selKey !== compareSelectionKey) {
+      compareSelectionKey = selKey;
+      state.compare = [];
+    }
+
+    const tt = state.results[state.cursor];
+    const on = tt ? compareIndexOf(tt) >= 0 : false;
+    const btn = $('#btn-shortlist');
+    btn.disabled = !tt;
+    btn.textContent = on ? '✓ Shortlisted' : '+ Compare';
+    btn.classList.toggle('primary', on);
+    btn.title = on ? 'Remove this timetable from the comparison' : 'Shortlist this timetable for comparison';
+
+    const open = $('#btn-compare');
+    open.hidden = !state.compare.length;
+    $('#cmp-count').textContent = state.compare.length;
+
+    if (!$('#modal-compare').classList.contains('hidden')) drawCompare();
+  }
+
+  function drawCompare() {
+    const options = state.compare.map((c) => {
+      const p = Ratings.ready ? timetableRating(c.tt, ratedScope()) : null;
+      return {
+        tt: c.tt,
+        index: c.index,
+        ratingPercentile: p,
+        ratingLetter: p == null ? null : Ratings.letter(p),
+      };
+    });
+    Render.renderCompare($('#compare-body'), options, state.courseOrder);
+  }
+
+  function openCompare() {
+    if (!state.compare.length) return;
+    drawCompare();
+    $('#modal-compare').classList.remove('hidden');
+  }
+
+  function clearCompare() {
+    state.compare = [];
+    updateCompareUi();
+    document.querySelectorAll('.modal').forEach((m) => m.classList.add('hidden'));
   }
 
   /* --------------------------------------------------------- share links */
@@ -1643,6 +1730,17 @@
       const menu = $('#export-menu');
       if (menu.open && !menu.contains(e.target)) menu.open = false;
     });
+    $('#btn-shortlist').addEventListener('click', toggleShortlist);
+    $('#btn-compare').addEventListener('click', openCompare);
+    $('#btn-clear-compare').addEventListener('click', clearCompare);
+    $('#compare-body').addEventListener('click', (e) => {
+      const rm = e.target.closest('[data-uncompare]');
+      if (!rm) return;
+      state.compare.splice(+rm.dataset.uncompare, 1);
+      if (!state.compare.length) document.querySelectorAll('.modal').forEach((m) => m.classList.add('hidden'));
+      updateCompareUi();
+    });
+
     $('#btn-fill').addEventListener('click', openFill);
     $('#btn-find-fill').addEventListener('click', runFill);
     $('#fill-search').addEventListener('input', renderFillList);

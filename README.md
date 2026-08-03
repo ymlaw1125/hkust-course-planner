@@ -21,6 +21,31 @@ can silently fail to load:
 node scripts/serve.mjs
 ```
 
+## Comparing shortlisted timetables
+
+**+ Compare** in the results header shortlists the timetable you're looking at;
+**Compare (n)** opens them side by side. Three at a time — three fits across the
+screen and keeps the difference table readable, four does neither.
+
+Three parts, in the order you actually use them:
+
+1. **Stat cards** — days on campus, days off, idle time, start/finish, average
+   instructor grade. The best value in each row is marked ★, but only where
+   "best" is unambiguous and only when it's an outright win, not a tie.
+2. **Mini week grids** — sections identical across *every* option render muted
+   grey; only the ones that differ get their course colour. Shortlisted
+   timetables usually share most of their sections, so this reduces the visual
+   diff to the handful of blocks that matter.
+3. **Difference table** — the differing course/kind slots spelled out per option.
+
+All the grids share **one time axis** (the union of every option's bounds), so a
+class at 10:30 sits at the same height in all three columns. Per-column bounds
+would make the comparison quietly misleading.
+
+The shortlist is dropped whenever you change which courses are selected, since
+timetables built from different course sets aren't comparable. Below 780px the
+columns stack instead.
+
 ## Exporting
 
 **Export ▾** in the results header offers four formats:

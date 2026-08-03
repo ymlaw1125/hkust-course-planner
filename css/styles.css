@@ -268,6 +268,92 @@ body.resizing.y, body.resizing.y * { cursor: row-resize; }
 .sk-pinned strong { color: var(--fg); }
 .sk-when { color: var(--fg-3); font-size: 11px; }
 
+/* ---------------------------------------------------------------- comparison */
+.modal-box.widest { width: min(1200px, 96vw); }
+
+.cmp {
+  display: grid;
+  grid-template-columns: 46px repeat(var(--n), minmax(0, 1fr));
+  gap: 0 10px;
+  align-items: start;
+}
+.cmp-corner { }
+
+.cmp-head {
+  border: 1px solid var(--line-2); border-radius: 8px;
+  padding: 7px 9px; margin-bottom: 8px; background: var(--bg-3);
+}
+.cmp-name { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.cmp-tag {
+  width: 19px; height: 19px; border-radius: 5px; flex: none;
+  background: var(--accent); color: #fff;
+  font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cmp-idx { font-size: 11px; color: var(--fg-3); flex: 1; }
+
+.cmp-stats { width: 100%; border-collapse: collapse; font-size: 11px; }
+.cmp-stats th {
+  text-align: left; font-weight: 400; color: var(--fg-3);
+  padding: 1px 0; white-space: nowrap;
+}
+.cmp-stats td { text-align: right; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cmp-stats tr.best td { color: var(--ok); font-weight: 600; }
+.cmp-win { font-size: 9px; }
+
+.cmp-daystrip {
+  display: grid; grid-template-columns: repeat(var(--dc), 1fr);
+  font-size: 10px; color: var(--fg-3); text-align: center; margin-bottom: 3px;
+}
+
+.cmp-gutter { position: relative; }
+.cmp-gutter span {
+  position: absolute; right: 4px; font-size: 9.5px; color: var(--fg-3);
+  transform: translateY(-4px); font-variant-numeric: tabular-nums;
+}
+
+.cmp-week {
+  display: grid; grid-template-columns: repeat(var(--dc), 1fr);
+  gap: 2px; background: var(--line); border-radius: 6px; overflow: hidden;
+}
+.cmp-day { position: relative; background: var(--bg-3); }
+
+.cmp-block {
+  position: absolute; border-radius: 3px; overflow: hidden;
+  padding: 1px 3px; line-height: 1.15;
+  display: flex; flex-direction: column; color: #fff;
+}
+.cmp-block span { font-size: 8.5px; font-weight: 700; white-space: nowrap; }
+.cmp-block em { font-size: 8px; font-style: normal; opacity: .85; }
+/* Shared across every option — deliberately colourless so the differences pop. */
+.cmp-block.shared { background: var(--line-2); color: var(--fg-3); }
+.cmp-block.diff { box-shadow: 0 0 0 1px rgba(255, 255, 255, .35); }
+
+.cmp-legend {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  margin: 10px 0 4px; font-size: 11px; color: var(--fg-2);
+}
+.cmp-legend .sw {
+  display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+  margin-right: 5px; vertical-align: -1px;
+}
+.cmp-legend .sw.shared { background: var(--line-2); }
+.cmp-legend .sw.diff { background: var(--accent); }
+
+.cmp-diff { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+.cmp-diff th, .cmp-diff td {
+  text-align: left; padding: 4px 8px; border-top: 1px solid var(--line);
+}
+.cmp-diff thead th { color: var(--fg-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+.cmp-diff tbody th { font-weight: 600; white-space: nowrap; }
+.cmp-diff tbody th small { color: var(--fg-3); font-weight: 400; }
+.cmp-diff td.uniq { color: var(--accent); font-weight: 600; }
+
+@media (max-width: 780px) {
+  .cmp { grid-template-columns: 46px 1fr; }
+  .cmp-head, .cmp-daystrip, .cmp-week { grid-column: 2; }
+}
+
 /* ---------------------------------------------------------------- export menu */
 .menu { position: relative; }
 .menu > summary {

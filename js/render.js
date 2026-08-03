@@ -242,6 +242,165 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  /* ------------------------------------------------------------ comparison */
+
+  const CMP_PX_PER_MIN = 0.44;
+
+  /** Which course+kind slots differ between the shortlisted options. */
+  function compareSections(options) {
+    const slots = new Map();
+    options.forEach((o, i) => {
+      for (const e of o.tt.entries) {
+        const key = `${e.course.code}|${e.section.kind}`;
+        if (!slots.has(key)) {
+          slots.set(key, { course: e.course, kind: e.section.kind, picks: new Array(options.length).fill(null) });
+        }
+        slots.get(key).picks[i] = e.section;
+      }
+    });
+
+    const differing = [];
+    let sameCount = 0;
+    // Sections identical across every option get muted in the grid, so the
+    // handful that actually differ are the only coloured things on screen.
+    const common = new Set();
+    for (const slot of slots.values()) {
+      const names = slot.picks.map((s) => (s ? s.section : '—'));
+      if (new Set(names).size > 1) {
+        differing.push({ ...slot, names });
+      } else {
+        sameCount++;
+        common.add(`${slot.course.code}|${names[0]}`);
+      }
+    }
+    return { differing, sameCount, common, total: slots.size };
+  }
+
+  /** Stat rows, with the best value in each row flagged where "best" is unambiguous. */
+  function compareStats(options) {
+    const rows = [
+      { label: 'Days on campus', get: (o) => o.tt.stats.days, fmt: (v) => `${v}`, best: 'min' },
+      { label: 'Days off', get: (o) => o.tt.stats.freeWeekdays, fmt: (v) => `${v}`, best: 'max' },
+      { label: 'Idle between classes', get: (o) => o.tt.stats.totalGap, fmt: (v) => `${(v / 60).toFixed(1)}h`, best: 'min' },
+      { label: 'Earliest start', get: (o) => o.tt.stats.earliestStart, fmt: (v) => (v == null ? '–' : hhmm(v)), best: null },
+      { label: 'Latest finish', get: (o) => o.tt.stats.latestEnd, fmt: (v) => (v == null ? '–' : hhmm(v)), best: null },
+    ];
+    if (options.some((o) => o.ratingPercentile != null)) {
+      rows.push({
+        label: 'Avg instructor',
+        get: (o) => o.ratingPercentile,
+        fmt: (v, o) => (v == null ? '–' : o.ratingLetter),
+        best: 'max',
+      });
+    }
+
+    for (const row of rows) {
+      row.values = options.map(row.get);
+      row.bestIdx = -1;
+      if (!row.best) continue;
+      const nums = row.values.filter((v) => v != null);
+      if (!nums.length) continue;
+      const target = row.best === 'min' ? Math.min(...nums) : Math.max(...nums);
+      // Only flag a winner when it is actually a winner, not a tie.
+      if (row.values.filter((v) => v === target).length === 1) row.bestIdx = row.values.indexOf(target);
+    }
+    return rows;
+  }
+
+  function renderCompare(container, options, courseOrder) {
+    if (!options.length) {
+      container.innerHTML = '<p class="empty big">Shortlist a timetable with <strong>+ Compare</strong> to see it here.</p>';
+      return;
+    }
+
+    // One shared time axis, or the same class would sit at different heights
+    // in each column and the comparison would mislead.
+    const all = options.flatMap((o) => o.tt.meetings);
+    const { startMin, endMin, dayCount } = gridBounds(all);
+    const bodyH = (endMin - startMin) * CMP_PX_PER_MIN;
+    const { differing, sameCount, common, total } = compareSections(options);
+    const stats = compareStats(options);
+
+    const heads = options.map((o, i) => `
+      <div class="cmp-head">
+        <div class="cmp-name">
+          <span class="cmp-tag">${String.fromCharCode(65 + i)}</span>
+          <span class="cmp-idx">#${o.index + 1}</span>
+          <button class="btn tiny ghost" data-uncompare="${i}" title="Remove from comparison">✕</button>
+        </div>
+        <table class="cmp-stats">
+          ${stats.map((r) => `<tr${r.bestIdx === i ? ' class="best"' : ''}>
+              <th>${escapeHtml(r.label)}</th>
+              <td>${escapeHtml(r.fmt(r.values[i], o))}${r.bestIdx === i ? ' <span class="cmp-win">★</span>' : ''}</td>
+            </tr>`).join('')}
+        </table>
+      </div>`).join('');
+
+    const dayRow = (n) => `<div class="cmp-daystrip" style="--dc:${n}">${
+      Array.from({ length: n }, (_, d) => `<span>${DAYS[d][0]}</span>`).join('')
+    }</div>`;
+
+    const weeks = options.map((o) => {
+      const byDay = new Map();
+      for (const m of o.tt.meetings) {
+        if (!byDay.has(m.day)) byDay.set(m.day, []);
+        byDay.get(m.day).push(m);
+      }
+      const cols = Array.from({ length: dayCount }, (_, d) => {
+        const blocks = assignColumns(byDay.get(d) || []).map((m) => {
+          const shared = common.has(`${m.course.code}|${m.section.section}`);
+          const order = courseOrder.get(m.course.code) ?? 0;
+          const top = (m.start - startMin) * CMP_PX_PER_MIN;
+          const h = Math.max(14, (m.end - m.start) * CMP_PX_PER_MIN - 2);
+          const style = shared
+            ? `top:${top}px;height:${h}px;left:${(m._col / m._cols) * 100}%;width:${100 / m._cols}%`
+            : `top:${top}px;height:${h}px;left:${(m._col / m._cols) * 100}%;width:${100 / m._cols}%;background:${colorFor(m.course.code, order)}`;
+          return `<div class="cmp-block${shared ? ' shared' : ' diff'}" style="${style}"
+                       title="${escapeHtml(`${m.course.code} ${m.section.section}\n${DAYS[m.day]} ${hhmm(m.start)}–${hhmm(m.end)}\n${m.section.rooms[0] || ''}`)}">
+              <span>${escapeHtml(m.course.code.replace(/\s+/g, ''))}</span>
+              <em>${escapeHtml(m.section.section)}</em>
+            </div>`;
+        }).join('');
+        return `<div class="cmp-day">${blocks}</div>`;
+      }).join('');
+      return `<div class="cmp-week" style="--dc:${dayCount};height:${bodyH}px">${cols}</div>`;
+    }).join('');
+
+    const hours = [];
+    for (let t = startMin; t < endMin; t += 60) {
+      hours.push(`<span style="top:${(t - startMin) * CMP_PX_PER_MIN}px">${hhmm(t)}</span>`);
+    }
+
+    const diffList = differing.length
+      ? differing.map((d) => `<tr>
+            <th>${escapeHtml(d.course.code)} <small>${escapeHtml((KIND_LABEL[d.kind] || d.kind).toLowerCase())}</small></th>
+            ${d.names.map((n, i) => `<td${d.names.filter((x) => x === n).length === 1 ? ' class="uniq"' : ''}>${escapeHtml(n)}</td>`).join('')}
+          </tr>`).join('')
+      : `<tr><td colspan="${options.length + 1}" class="muted">These options are identical.</td></tr>`;
+
+    container.innerHTML = `
+      <div class="cmp" style="--n:${options.length}">
+        <div class="cmp-corner"></div>
+        ${heads}
+        <div class="cmp-corner"></div>
+        ${options.map(() => dayRow(dayCount)).join('')}
+        <div class="cmp-gutter" style="height:${bodyH}px">${hours.join('')}</div>
+        ${weeks}
+      </div>
+
+      <div class="cmp-legend">
+        <span><i class="sw shared"></i>same in all ${options.length}</span>
+        <span><i class="sw diff"></i>differs</span>
+        <span class="muted">${sameCount} of ${total} section slots identical</span>
+      </div>
+
+      <table class="cmp-diff">
+        <thead><tr><th>Differs in</th>${options.map((_, i) =>
+          `<th>${String.fromCharCode(65 + i)}</th>`).join('')}</tr></thead>
+        <tbody>${diffList}</tbody>
+      </table>`;
+  }
+
   /* ------------------------------------------------------------ PNG export */
 
   /** The bounds the grid is drawn to — shared so exports match the screen. */
@@ -461,7 +620,8 @@
   }
 
   global.HK.Render = {
-    renderGrid, renderSectionList, colorFor, toICS, toCSV, toPNG, downloadPNG,
+    renderGrid, renderSectionList, renderCompare, colorFor,
+    toICS, toCSV, toPNG, downloadPNG,
     download, downloadBlob, escapeHtml, TERM_START,
   };
 })(window);
