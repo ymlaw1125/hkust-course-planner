@@ -93,6 +93,14 @@ is uploaded. It's JSON with single-letter keys, deflated via `CompressionStream`
 and base64url-encoded; browsers without `CompressionStream` fall back to plain
 base64 (`#p=j…` instead of `#p=z…`), which still works, just longer.
 
+The link carries **the timetable you're looking at**, not just the setup — open
+it and you land on that exact option, regenerated and selected for you. It
+stores the chosen sections rather than the result number, because "#3" shifts
+whenever the catalog, the ratings snapshot or the sort order changes. If the
+catalog has moved on far enough that the timetable no longer exists, it says so
+and shows the first result instead of silently showing something else. Planner
+files carry it the same way.
+
 Opening a link applies it and then **strips the fragment from the address bar**,
 so the session becomes the visitor's own — a later refresh won't wipe their
 edits by re-applying a stale link. If they already had a saved setup, the link

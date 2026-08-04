@@ -595,7 +595,9 @@
 
   /* --------------------------------------------------------- generate */
 
-  function generate() {
+  /** `onDone` runs once results exist — the search is deferred a tick to paint. */
+  function generate(onDone) {
+    const done = typeof onDone === 'function' ? onDone : null;
     const statusEl = $('#gen-status');
     if (!state.selected.length) {
       statusEl.innerHTML = '<span class="warn">Pick at least one course first.</span>';
@@ -624,6 +626,7 @@
         res = Generator.generate(courses, opts);
       } catch (err) {
         statusEl.innerHTML = `<span class="warn">${esc(err.message)}</span>`;
+        if (done) done();
         return;
       }
       const ms = Math.round(performance.now() - t0);
@@ -665,6 +668,7 @@
       statusEl.innerHTML = bits.map((b) => `<div>${b}</div>`).join('');
 
       showResult();
+      if (done) done();
     }, 20);
   }
 
@@ -1282,7 +1286,45 @@
     if (Object.keys(dis).length) out.d = dis;
     if (Object.keys(pin).length) out.p = pin;
     if (star.length) out.r = star;
+
+    // The timetable actually on screen, as chosen sections per course. Storing
+    // the result index instead would be meaningless to the recipient — it
+    // shifts with the catalog, the ratings snapshot and the sort order.
+    const shown = state.results[state.cursor];
+    if (shown) out.t = sectionsOf(shown, out.s);
     return out;
+  }
+
+  /** Sections of a timetable, as "L1|T2|LA1" strings parallel to `codes`. */
+  function sectionsOf(tt, codes) {
+    const byCourse = new Map();
+    for (const e of tt.entries) {
+      if (!byCourse.has(e.course.code)) byCourse.set(e.course.code, []);
+      byCourse.get(e.course.code).push(e.section.section);
+    }
+    return codes.map((code) => (byCourse.get(code) || []).slice().sort().join('|'));
+  }
+
+  /** Index of the result matching `wanted`, or -1. */
+  function findTimetable(codes, wanted) {
+    const want = new Map();
+    codes.forEach((code, i) => {
+      const v = (wanted[i] || '').split('|').filter(Boolean).sort().join('|');
+      if (v) want.set(code, v);
+    });
+    if (!want.size) return -1;
+
+    return state.results.findIndex((tt) => {
+      const got = new Map();
+      for (const e of tt.entries) {
+        if (!got.has(e.course.code)) got.set(e.course.code, []);
+        got.get(e.course.code).push(e.section.section);
+      }
+      for (const [code, v] of want) {
+        if ((got.get(code) || []).sort().join('|') !== v) return false;
+      }
+      return true;
+    });
   }
 
   const b64urlEncode = (bytes) => {
@@ -1345,6 +1387,7 @@
       app: PLANNER_FILE.app,
       version: 1,
       selected: o.s || [],
+      timetable: o.t || null,
       disabled: o.d || {},
       pinned: o.p || {},
       preferRated: Object.fromEntries((o.r || []).map((code) => [code, true])),
@@ -1378,13 +1421,13 @@
       previousSession = (saved && saved.selected && saved.selected.length) ? saved : null;
 
       history.replaceState(null, '', location.pathname + location.search);
-      await importPlanner(data, { source: 'link' });
-
-      if (previousSession) {
-        $('#gen-status').insertAdjacentHTML('beforeend',
-          `<div class="muted">This replaced your saved setup of ${previousSession.selected.length} course(s). ` +
-          `<button id="btn-undo-share" class="btn tiny ghost">Restore it</button></div>`);
-      }
+      await importPlanner(data, {
+        source: 'link',
+        extraNote: previousSession
+          ? `<div class="muted">This replaced your saved setup of ${previousSession.selected.length} course(s). ` +
+            `<button id="btn-undo-share" class="btn tiny ghost">Restore it</button></div>`
+          : '',
+      });
       return true;
     } catch (err) {
       history.replaceState(null, '', location.pathname + location.search);
@@ -1430,12 +1473,14 @@
    * source of truth for times and rooms.
    */
   function buildPlannerFile() {
+    const shown = state.results[state.cursor];
     return {
       ...PLANNER_FILE,
       exported: new Date().toISOString(),
       term: (Catalog.index && Catalog.index.term) || null,
       termName: (Catalog.index && Catalog.index.termName) || null,
       selected: state.selected.slice(),
+      timetable: shown ? sectionsOf(shown, state.selected) : null,
       disabled: state.disabled,
       pinned: state.pinned,
       preferRated: state.preferRated,
@@ -1455,7 +1500,12 @@
     Render.download(name, JSON.stringify(buildPlannerFile(), null, 2), 'application/json');
   }
 
-  async function importPlanner(data, { source = 'file' } = {}) {
+  /**
+   * `extraNote` is appended to whatever the final status ends up being. It has
+   * to be passed in rather than appended by the caller, because rebuilding a
+   * shared timetable finishes asynchronously and rewrites the status.
+   */
+  async function importPlanner(data, { source = 'file', extraNote = '' } = {}) {
     const what = source === 'link' ? 'this shared link' : 'this planner file';
     if (state.selected.length && !confirm(`Replace your current setup with ${what}?`)) return false;
 
@@ -1507,12 +1557,35 @@
       ? ` <span class="warn">File is for term ${esc(data.term)}, your catalog is ${esc(Catalog.index.term)}.</span>`
       : '';
     const from = source === 'link' ? 'a shared link' : 'the planner file';
-    $('#gen-status').innerHTML =
+    const head =
       `<div><span class="ok">Loaded ${found.length} course${found.length === 1 ? '' : 's'} from ${from}.</span>${termNote}</div>` +
       (missing.length
         ? `<div><span class="warn">Not offered this term: ${esc(missing.join(', '))}.</span></div>`
-        : '') +
-      '<div class="muted">Hit Generate.</div>';
+        : '');
+
+    // A shared timetable is the thing being shared, so land on it rather than
+    // making the recipient press Generate and hunt for it.
+    const wanted = data.timetable;
+    if (wanted && wanted.length && !missing.length) {
+      $('#gen-status').innerHTML = head + '<div class="muted">Rebuilding the shared timetable…</div>';
+      generate(() => {
+        const idx = findTimetable(data.selected || [], wanted);
+        let note;
+        if (idx >= 0) {
+          state.cursor = idx;
+          showResult();
+          note = `<span class="ok">Showing the shared timetable — option ${idx + 1} of ${state.results.length.toLocaleString()}.</span>`;
+        } else if (state.results.length) {
+          note = '<span class="warn">The exact timetable shared isn\'t among these results — showing the first instead.</span>';
+        } else {
+          note = '<span class="warn">Couldn\'t rebuild the shared timetable from this catalog.</span>';
+        }
+        $('#gen-status').insertAdjacentHTML('beforeend', `<div>${note}</div>${extraNote}`);
+      });
+      return true;
+    }
+
+    $('#gen-status').innerHTML = head + '<div class="muted">Hit Generate.</div>' + extraNote;
     return true;
   }
 
