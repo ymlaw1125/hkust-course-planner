@@ -274,6 +274,15 @@ Beyond page views: `generate`, **`generate-zero-results`**, `generate-truncated`
 `generate-zero-results` is the one worth watching — it means the constraints
 confused someone or something is broken, which page views will never tell you.
 
+In GoatCounter these appear in the **same Pages list** as page views, named
+without a leading `/` (`generate`, `sort-days`), so the slash tells them apart.
+Use the *Filter paths* box to isolate them.
+
+Events are **queued until `count.js` loads**. It's async and lands roughly 1.3s
+after `DOMContentLoaded` on GitHub Pages, so anything fired during start-up —
+`share-opened`, notably — would otherwise be dropped silently. If the script is
+blocked by an ad blocker the queue is discarded rather than growing.
+
 ## Finding courses
 
 The course search matches on code or title, and **ignores spacing in codes** —

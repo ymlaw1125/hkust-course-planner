@@ -23,6 +23,26 @@
   }
 
   let loading = false;
+  let ready = false;
+
+  /* count.js is async and lands well after DOMContentLoaded — measured at
+     ~1.3s on GitHub Pages. Events fired during start-up would simply be thrown
+     away, and "share-opened" is fired during start-up. So queue until it's up. */
+  const pending = [];
+  const MAX_PENDING = 20;
+
+  function send(name) {
+    const gc = global.goatcounter;
+    if (!gc || typeof gc.count !== 'function') return;
+    try {
+      gc.count({ path: name, title: name, event: true });
+    } catch (_) { /* never let a counter break the page */ }
+  }
+
+  function flush() {
+    ready = true;
+    while (pending.length) send(pending.shift());
+  }
 
   function load() {
     if (!enabled() || loading) return;
@@ -31,6 +51,9 @@
     s.async = true;
     s.dataset.goatcounter = `https://${SITE}.goatcounter.com/count`;
     s.src = 'https://gc.zgo.at/count.js';
+    s.onload = flush;
+    // Blocked by an ad blocker, or offline: drop the queue instead of growing it.
+    s.onerror = () => { ready = true; pending.length = 0; };
     document.head.appendChild(s);
   }
 
@@ -40,11 +63,8 @@
    */
   function event(name) {
     if (!enabled()) return;
-    const gc = global.goatcounter;
-    if (!gc || typeof gc.count !== 'function') return;
-    try {
-      gc.count({ path: name, title: name, event: true });
-    } catch (_) { /* never let a counter break the page */ }
+    if (ready) { send(name); return; }
+    if (pending.length < MAX_PENDING) pending.push(name);
   }
 
   global.HK = global.HK || {};
