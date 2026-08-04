@@ -235,6 +235,45 @@ window re-clamps rather than stranding a track off-screen.
 Below 1180px the panels stack and the splitters disappear, since there is
 nothing left to split.
 
+## Analytics (optional, off by default)
+
+GitHub Pages has no built-in analytics — the repo's Insights → Traffic tab
+counts views of the *repository*, not the site.
+
+[js/analytics.js](js/analytics.js) wires up [GoatCounter](https://www.goatcounter.com)
+(free, cookieless, no consent banner needed). It is **disabled until you fill in
+`SITE`** — with it empty nothing loads and no request is made. Sign up, then set:
+
+```js
+const SITE = 'your-code';   // the "your-code" in https://your-code.goatcounter.com
+```
+
+It also skips `file://` copies, `localhost`, and anyone sending Do Not Track.
+
+### Why the fragment is stripped in `<head>`
+
+Share links carry the visitor's whole timetable in the URL fragment, and
+analytics scripts routinely report `document.location` — GA4's `page_location`
+is the full href, fragment included. A tag in `<head>` would fire *before*
+`DOMContentLoaded`, so it would capture the payload before the app ever ran.
+
+So an inline script at the very top of `<head>` captures the payload into
+`window.__sharePayload` and strips it from the URL before any other script
+loads. Verified by putting a probe where an analytics tag would sit and opening
+a share link: it recorded `http://localhost:5173/` with no payload, while the
+shared timetable still restored correctly.
+
+This holds for any analytics tool, not just GoatCounter.
+
+### Events
+
+Beyond page views: `generate`, **`generate-zero-results`**, `generate-truncated`,
+`sort-<name>`, `share-created`, `share-opened`, `compare-<n>`, `fill-catalog`,
+`fill-common-core`, `export-<kind>`.
+
+`generate-zero-results` is the one worth watching — it means the constraints
+confused someone or something is broken, which page views will never tell you.
+
 ## Finding courses
 
 The course search matches on code or title, and **ignores spacing in codes** —

@@ -6,6 +6,9 @@
     DAYS, KIND_LABEL, KIND_ORDER, hhmm, Catalog, CommonCore, Ratings, sectionsByKind,
     Generator, Render, Parser,
   } = global.HK;
+
+  // Analytics is optional and may be absent or blocked; never let that matter.
+  const Analytics = global.HK.Analytics || { event() {}, load() {}, enabled: () => false };
   const $ = (sel) => document.querySelector(sel);
   const esc = Render.escapeHtml;
 
@@ -667,6 +670,12 @@
       for (const w of res.warnings) bits.push(`<span class="note">${esc(w)}</span>`);
       statusEl.innerHTML = bits.map((b) => `<div>${b}</div>`).join('');
 
+      // A generation that finds nothing is the most useful thing to know about:
+      // it means the constraints confused someone, or something is broken.
+      Analytics.event(res.timetables.length ? 'generate' : 'generate-zero-results');
+      Analytics.event(`sort-${opts.sort}`);
+      if (res.truncated) Analytics.event('generate-truncated');
+
       showResult();
       if (done) done();
     }, 20);
@@ -930,6 +939,8 @@
     const t0 = performance.now();
     const { matches, total } = Generator.findAdditions(courses, tt, opts);
     const ms = Math.round(performance.now() - t0);
+
+    Analytics.event(groupId === '*' ? 'fill-catalog' : 'fill-common-core');
 
     const scope = groupId === '*'
       ? 'the whole catalog'
@@ -1237,6 +1248,7 @@
     if (!state.compare.length) return;
     drawCompare();
     $('#modal-compare').classList.remove('hidden');
+    Analytics.event(`compare-${state.compare.length}`);
   }
 
   function clearCompare() {
@@ -1408,10 +1420,16 @@
    * re-applying a stale link.
    */
   async function applyShareLink() {
-    const m = /[#&]p=([A-Za-z0-9\-_]+)/.exec(location.hash || '');
-    if (!m) return false;
+    // The inline script in <head> has normally taken this out of the URL
+    // already; the hash is only read here as a fallback for a cached page.
+    const payload = global.__sharePayload
+      || (/[#&]p=([A-Za-z0-9\-_]+)/.exec(location.hash || '') || [])[1];
+    if (!payload) return false;
+    delete global.__sharePayload;
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+
     try {
-      const data = expandShare(await decodeShare(m[1]));
+      const data = expandShare(await decodeShare(payload));
 
       // Applying the link overwrites the saved session, so keep a copy and
       // offer it back. A blocking confirm() before the page has even rendered
@@ -1420,7 +1438,7 @@
       try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (_) { /* ignore */ }
       previousSession = (saved && saved.selected && saved.selected.length) ? saved : null;
 
-      history.replaceState(null, '', location.pathname + location.search);
+      Analytics.event('share-opened');
       await importPlanner(data, {
         source: 'link',
         extraNote: previousSession
@@ -1447,6 +1465,7 @@
     $('#modal-share').classList.remove('hidden');
     box.focus();
     box.select();
+    Analytics.event('share-created');
   }
 
   async function copyShare() {
@@ -1811,10 +1830,11 @@
     $('#btn-next').addEventListener('click', () => { if (state.cursor < state.results.length - 1) { state.cursor++; showResult(); } });
     // Close the menu after picking, so it doesn't hang open over the grid.
     const closeExportMenu = () => { $('#export-menu').open = false; };
-    $('#btn-ics').addEventListener('click', () => { closeExportMenu(); exportIcs(); });
-    $('#btn-png').addEventListener('click', () => { closeExportMenu(); exportPng(); });
-    $('#btn-csv').addEventListener('click', () => { closeExportMenu(); exportCsv(); });
-    $('#btn-planner').addEventListener('click', () => { closeExportMenu(); exportPlanner(); });
+    const onExport = (kind, fn) => () => { closeExportMenu(); Analytics.event(`export-${kind}`); fn(); };
+    $('#btn-ics').addEventListener('click', onExport('ics', exportIcs));
+    $('#btn-png').addEventListener('click', onExport('png', exportPng));
+    $('#btn-csv').addEventListener('click', onExport('csv', exportCsv));
+    $('#btn-planner').addEventListener('click', onExport('planner', exportPlanner));
     $('#btn-share').addEventListener('click', () => { closeExportMenu(); openShare(); });
     $('#btn-copy-share').addEventListener('click', copyShare);
     $('#gen-status').addEventListener('click', (e) => {

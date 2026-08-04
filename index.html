@@ -6,7 +6,20 @@
 <title>HKUST Timetable Planner</title>
 <link rel="stylesheet" href="css/styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗓️</text></svg>">
-</head>
+
+<script>
+/* Take the share payload out of the URL before anything else can read it.
+   Analytics scripts routinely report document.location, and the fragment holds
+   the visitor's entire timetable — courses, locked sections, constraints. That
+   must never reach a third party, so it is captured and stripped here, ahead of
+   every other script on the page. */
+(function () {
+  var m = /[#&]p=([A-Za-z0-9\-_]+)/.exec(location.hash || '');
+  if (!m) return;
+  window.__sharePayload = m[1];
+  history.replaceState(null, '', location.pathname + location.search);
+})();
+</script></head>
 <body>
 
 <header class="topbar">
@@ -388,6 +401,7 @@ COMP 3711 | T1A | Fr 10:00 - 10:50 | Rm 1104"></textarea>
 <script src="js/parser.js"></script>
 <script src="js/generator.js"></script>
 <script src="js/render.js"></script>
+<script src="js/analytics.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
